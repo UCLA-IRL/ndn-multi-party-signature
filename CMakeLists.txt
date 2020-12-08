@@ -2,8 +2,15 @@
 cmake_minimum_required(VERSION 3.12)
 include(ExternalProject)
 
+if(NOT "${CMAKE_SOURCE_DIR}/external/bls/lib/libbls384_256.a")
+   execute_process(COMMAND make lib/libmcl.a
+   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/external/mcl)
+   execute_process(COMMAND make BLS_ETH=1 MCL_USE_GMP=0 lib/libbls384_256.a
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/external/bls)
+endif(NOT "${CMAKE_SOURCE_DIR}/external/bls/lib/libbls384_256.a")
+
 # project name
-project(ndn-multi-party-signature)
+project(ndnmps)
 
 # flags
 set(CMAKE_CXX_STANDARD 14)
@@ -14,11 +21,6 @@ set(CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointe
 # dependencies
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(NDN_CXX REQUIRED libndn-cxx)
-
-ExternalProject_Add(bls
-                    PREFIX "./external/bls"
-                    GIT_REPOSITORY https://github.com/herumi/bls
-)
 
 # files
 file(GLOB NDN_MPS_SRC
