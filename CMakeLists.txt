@@ -1,0 +1,47 @@
+# cmake version to be used
+cmake_minimum_required(VERSION 3.12)
+include(ExternalProject)
+
+# project name
+project(ndn-multi-party-signature)
+
+# flags
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
+set(CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
+
+# dependencies
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(NDN_CXX REQUIRED libndn-cxx)
+
+ExternalProject_Add(bls
+                    PREFIX "./external/bls"
+                    GIT_REPOSITORY https://github.com/herumi/bls
+)
+
+# files
+file(GLOB NDN_MPS_SRC
+    "./src/*.hpp"
+    "./src/*.cpp"
+    "./include/ndnmps/*.hpp")
+# include
+include_directories(${NDN_CXX_INCLUDE_DIRS})
+
+# link
+link_directories(${NDN_CXX_LIBRARY_DIRS})
+
+# target
+add_library(ndnmps SHARED "")
+target_sources(ndnmps PRIVATE ${NDN_MPS_SRC})
+target_include_directories(ndnmps PUBLIC ./include)
+target_include_directories(ndnmps PRIVATE ./src)
+target_compile_options(ndnmps PUBLIC ${NDN_CXX_CFLAGS})
+target_link_libraries(ndnmps PUBLIC ${NDN_CXX_LIBRARIES})
+
+add_executable(unit-test ./tests/unit-test.cpp)
+target_link_libraries(unit-test PUBLIC ndnmps)
+
+install(TARGETS ndnmps
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
