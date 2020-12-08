@@ -31,7 +31,7 @@ set(CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointe
 
 # dependencies
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(NDN_CXX REQUIRED libndn-cxx)
+pkg_check_modules(NDN_CXX REQUIRED IMPORTED_TARGET libndn-cxx)
 
 set(BLS_ROOT ${CMAKE_SOURCE_DIR}/external/bls)
 set(MCL_ROOT ${CMAKE_SOURCE_DIR}/external/mcl)
@@ -55,8 +55,8 @@ add_library(ndnmps SHARED "")
 target_sources(ndnmps PRIVATE ${NDN_MPS_SRC})
 target_include_directories(ndnmps PUBLIC ./include)
 target_include_directories(ndnmps PRIVATE ./src)
-target_compile_options(ndnmps PUBLIC ${NDN_CXX_CFLAGS})
 target_link_libraries(ndnmps PUBLIC
+PkgConfig::NDN_CXX
 ${CMAKE_SOURCE_DIR}/external/mcl/lib/libmcl.a
 ${CMAKE_SOURCE_DIR}/external/bls/lib/libbls384_256.a
 nlohmann_json::nlohmann_json)
