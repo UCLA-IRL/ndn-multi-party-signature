@@ -1,6 +1,6 @@
 #include <iostream>
 #include "ndnmps/multi-party-signature.hpp"
-#include "schema.hpp"
+#include "ndnmps/schema.hpp"
 
 namespace ndn {
 

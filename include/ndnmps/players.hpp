@@ -3,7 +3,7 @@
 
 #include <iostream>
 #include <map>
-#include <schema.hpp>
+#include "ndnmps/schema.hpp"
 
 namespace ndn {
 

@@ -1,4 +1,4 @@
-#include "schema.hpp"
+#include "ndnmps/schema.hpp"
 #include <fstream>
 #include <sstream>
 
