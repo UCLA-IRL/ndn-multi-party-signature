@@ -22,13 +22,19 @@ set(CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointe
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(NDN_CXX REQUIRED libndn-cxx)
 
+set(BLS_ROOT ${CMAKE_SOURCE_DIR}/external/bls)
+set(MCL_ROOT ${CMAKE_SOURCE_DIR}/external/mcl)
+
 # files
 file(GLOB NDN_MPS_SRC
     "./src/*.hpp"
     "./src/*.cpp"
     "./include/ndnmps/*.hpp")
+
 # include
 include_directories(${NDN_CXX_INCLUDE_DIRS})
+include_directories(${MCL_ROOT}/include)
+include_directories(${BLS_ROOT}/include)
 
 # link
 link_directories(${NDN_CXX_LIBRARY_DIRS})
@@ -39,7 +45,9 @@ target_sources(ndnmps PRIVATE ${NDN_MPS_SRC})
 target_include_directories(ndnmps PUBLIC ./include)
 target_include_directories(ndnmps PRIVATE ./src)
 target_compile_options(ndnmps PUBLIC ${NDN_CXX_CFLAGS})
-target_link_libraries(ndnmps PUBLIC ${NDN_CXX_LIBRARIES})
+target_link_libraries(ndnmps
+${CMAKE_SOURCE_DIR}/external/mcl/lib/libmcl.a
+${CMAKE_SOURCE_DIR}/external/bls/lib/libbls384_256.a)
 
 add_executable(unit-test ./tests/unit-test.cpp)
 target_link_libraries(unit-test PUBLIC ndnmps)
