@@ -1,6 +1,8 @@
 #include "bls.hpp"
 
-void
-doSomething() {
-  return;
-}
+namespace ndn {
+
+static bool BLS_INITIALIZED = false;
+
+
+} // namespace ndn

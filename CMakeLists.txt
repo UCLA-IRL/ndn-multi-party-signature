@@ -1,6 +1,7 @@
 # cmake version to be used
 cmake_minimum_required(VERSION 3.12)
 include(ExternalProject)
+include(FetchContent)
 
 if(NOT "${CMAKE_SOURCE_DIR}/external/bls/lib/libbls384_256.a")
    execute_process(COMMAND make lib/libmcl.a
@@ -8,6 +9,16 @@ if(NOT "${CMAKE_SOURCE_DIR}/external/bls/lib/libbls384_256.a")
    execute_process(COMMAND make BLS_ETH=1 MCL_USE_GMP=0 lib/libbls384_256.a
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/external/bls)
 endif(NOT "${CMAKE_SOURCE_DIR}/external/bls/lib/libbls384_256.a")
+
+FetchContent_Declare(json
+  GIT_REPOSITORY https://github.com/nlohmann/json.git
+  GIT_TAG v3.7.3)
+
+FetchContent_GetProperties(json)
+if(NOT json_POPULATED)
+  FetchContent_Populate(json)
+  add_subdirectory(${json_SOURCE_DIR} ${json_BINARY_DIR} EXCLUDE_FROM_ALL)
+endif()
 
 # project name
 project(ndnmps)
@@ -45,11 +56,13 @@ target_sources(ndnmps PRIVATE ${NDN_MPS_SRC})
 target_include_directories(ndnmps PUBLIC ./include)
 target_include_directories(ndnmps PRIVATE ./src)
 target_compile_options(ndnmps PUBLIC ${NDN_CXX_CFLAGS})
-target_link_libraries(ndnmps
+target_link_libraries(ndnmps PUBLIC
 ${CMAKE_SOURCE_DIR}/external/mcl/lib/libmcl.a
-${CMAKE_SOURCE_DIR}/external/bls/lib/libbls384_256.a)
+${CMAKE_SOURCE_DIR}/external/bls/lib/libbls384_256.a
+nlohmann_json::nlohmann_json)
 
 add_executable(unit-test ./tests/unit-test.cpp)
+target_include_directories(unit-test PRIVATE ./src)
 target_link_libraries(unit-test PUBLIC ndnmps)
 
 install(TARGETS ndnmps
