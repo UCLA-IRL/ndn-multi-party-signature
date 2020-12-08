@@ -44,12 +44,14 @@ public:
   verifySignature(const blsSignature& sig, const MultipartySchema& schema);
 };
 
-typedef function<void()> onSignatureFinishCallback;
+typedef function<void(const Data& signedData)> SignatureFinishCallback;
+typedef function<void(const Data& unfinishedData, const std::string& reason)> SignatureFailureCallback;
 
 class Initiator {
 public:
   void
-  startSigningProcess(const MultipartySchema& schema, const std::string& content);
+  startSigningProcess(const MultipartySchema& schema, const Data& unfinishedData,
+                      const SignatureFinishCallback& successCb, const SignatureFailureCallback& failureCab);
 
 private:
   void
