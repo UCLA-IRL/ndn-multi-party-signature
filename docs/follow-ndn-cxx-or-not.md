@@ -1,6 +1,6 @@
 # Should the NDN-MPS be strictly integrated into the existing ndn-cxx::KeyChain framework?
 
-**Issue description**: When designing the new library (NDN-multiparty-signature, NDN-MPS in short), we encountered a selection choice question: should we 
+**Issue description**: When designing the new library (NDN-multiparty-signature, NDN-MPS in short), we encountered a selection choice question.
 
 * **Choice 1**: realize the new signature scheme and the storage of keys under the existing framework as defined in ndn-cxx::KeyChain.
 * **Choice 2**: realize our own signature scheme and signing APIs and delegate storage to further libraries/applications.
@@ -45,3 +45,7 @@ If we do not go with ndn-cxx::KeyChain, we need to provide our own APIs for BLS 
 However, since the NDN Data class and Signature class provides usable setters, we don't really need to redo the encoding/decoding of Data packets. Just simple high-level setting is enough.
 
 <span style="color:blue"> **Conclusion**: Some high-level code is required but low-level encoding is not needed. </span>
+
+## About validation
+
+The validation can be realized by inheriting ndn-cxx::validator and to support our own schema.
