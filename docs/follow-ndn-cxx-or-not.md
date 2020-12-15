@@ -9,7 +9,7 @@ To help make a better choice, I did some discussion for each topic to compare th
 
 ## Comparison
 
-### 1. Choice 1: Benefit from the existing TPM integration in ndn-cxx for secure storage of private keys
+### 1. Choice 1: Use the existing TPM integration in ndn-cxx for secure storage of private keys
 
 The fact is that the currently TPM backend implementation in ndn-cxx (ndn-cxx/security/tpm/impl) cannot be extended to support a new key type, in our case, the BLS private key.
 To add BLS key, we need to implement a new TPM backend class by ourselves and we cannot do this by inheriting existing TPM backend classes because all the virtual functions are marked with `final` keywords (a C++ keyword preventing a member function from overriding).
@@ -31,14 +31,14 @@ For example, they need to write a new TPM backend class for their TPM following 
 <span style="color:blue"> **Conclusion**: Not coupling with our own TPM can improve generality.
 Later, when this codebase is used by Operant's project, their TPM implementation can utilize the code in our library and update the signing/verification functions by delegating to the TPM instead of using raw key bits. </span>
 
-### 3. Choice 1 can reuse the existing KeyChain APIs to do signing
+### 3. Choice 1: reuse the existing KeyChain APIs to do signing
 
 As mentioned in the first discussion, to add the new key type, a new TPM backend impl is needed.
 Therefore, a new KeyChain instance is needed (which is different from the one used by `ndnsec` command line tools) and the users, in any case, will need to re-instantiate the KeyChain and use this new instance to sign.
 
 <span style="color:blue"> **Conclusion**: APIs must be called from a new instance of KeyChain. </span>
 
-### 4. Choice 2 needs a redo of encoding/decoding for signature and packets
+### 4. Choice 2: needs a redo of encoding/decoding for signature and packets
 
 If we do not go with ndn-cxx::KeyChain, we need to provide our own APIs for BLS signing.
 
