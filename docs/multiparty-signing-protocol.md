@@ -33,6 +33,7 @@ Prerequisites of a successful multiparty signature signing process:
 ### Phase 1: Signature collection
 
 **Input**: A scheme defined by the application.
+
 **Output**: A sufficient number of signed packets replied from signers.
 
 Phase 1 consists of multiple transactions between `I` and each `S` (`S`1 to `S`n).
@@ -65,6 +66,7 @@ Specifically, for each `I` and `S`, the protocol sets:
 ### Phase 2: Signature Aggregation
 
 **Input**: A list of signed inner packets, `D_S1` to `D_Sn`.
+
 **Output**: A single signed packet `D_agg`, a schema data packet for this `D_agg`.
 
 After performing signature collection process with each `S` (in parallel to achieve high throughput), now `I` owns a list of signed inner packets, `D_S1` to `D_Sn`.
@@ -91,8 +93,9 @@ Now `I` will:
 
 ### Phase 3: Signature Verification
 
-**Input**: A single signed packet `D_agg`
-**Output**: True/False (whether the signature is valid)
+**Input**: A single signed packet `D_agg`.
+
+**Output**: True/False (whether the signature is valid).
 
 `V` fetches `D_agg`, extract its keylocator and fetches `D_info`.
 
