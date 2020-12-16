@@ -10,6 +10,10 @@
 * The packets signed by signers can be merged into a single packet (that's why we use BLS).
 * Each aggregated packet should refer the signing information to the scheme and other information so that a verfier has enough knowledge to know which keys should be used in verification (key info is needed for a signature with complex semantics).
 
+## Overview
+
+![image](protocol.jpg)
+
 ## Protocol Description
 
 Roles (in practice, a node can play more than one roles):
