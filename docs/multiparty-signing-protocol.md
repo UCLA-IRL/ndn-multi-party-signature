@@ -14,6 +14,9 @@
 
 ![image](protocol.jpg)
 
+* Green arrow: Interest packet
+* Red arrow: Data packet
+
 ## Protocol Description
 
 Roles (in practice, a node can play more than one roles):
