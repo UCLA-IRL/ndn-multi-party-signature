@@ -35,7 +35,7 @@ Packets:
 Prerequisites of a successful multiparty signature signing process:
 
 * A `S` can verify `I`'s request. This requires `S` can verify `I`'s identity, e.g., by installing its certificate in advance.
-* A `V` can verify the aggregated signature. This requires `V` can verifies each involved signer's identity, e.g., by installing each `S`'s certificate in advance.
+* A `V` can verify the aggregated signature. This requires `V` can verify each involved signer's identity, e.g., by installing each `S`'s certificate in advance.
 
 ### Phase 1: Signature collection
 
