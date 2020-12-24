@@ -2,7 +2,7 @@
 
 **Author**: Zhiyi Zhang
 
-**Current Version**: Dec 15, 2020
+**Versions**: v2 (Dec 23, 2020) obsolete v1 (Dec 15, 2020)
 
 ## Design Principles
 
@@ -12,10 +12,18 @@
 
 ## Overview
 
-![image](protocol.jpg)
+![Overview](protocol.jpg)
 
-* Green arrow: Interest packet
-* Red arrow: Data packet
+In NDN-MPS protocol, we have following main design:
+
+* We utilize a new NDN based remote procedure call (RPC) to collect signatures from signers, modified from RICE (ICN 2019).
+* We propose a new type of key locator to carry complicated signature information. In our case, is the schema and the exact keys involved in the signature signing.
+
+Also, we have following considerations:
+
+* This library is for signature signing based on what the application wants, which is below the application logic.
+So our library should take whatever name specified by the app instead of modifying the name with suffix or prefix. Taking some steps back, our lib does not block apps from using names with policies in it.
+* Similarly, this library does not make assumptions on (i) how signers' certificates are installed to the initiator or verifier, (ii) how verifier knows and fetches the signed packet,  (iii) how verifier obtains the schema to decide whether a packet is trusted or not.
 
 ## Protocol Description
 
