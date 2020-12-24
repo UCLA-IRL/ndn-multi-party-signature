@@ -1,6 +1,8 @@
 # Integrate Multiparty Trust into NDNCERT revocation with DLedger: A Roadmap
 
-Nov 18 2020, Zhiyi
+**Author**: Zhiyi Zhang
+
+**Version**: Updated in Dec 23, 2020; Nov 18, 2020
 
 ## An overview
 
@@ -8,7 +10,15 @@ Nov 18 2020, Zhiyi
 |:----:|:-----------:|:--------------:|
 |  1  | Prepare Multiparty Signature Library | 3～4 weeks |
 |  2  | Integrate multiparty signature into NDNCERT | 2 weeks |
-|  3  | Integrate test with DLedger | 1 weeks |
+|  3  | Integrate test with DLedger | 2 weeks |
+
+**Time in total**: 2 months
+
+**Starting date**: The start of the Spring quarter of UCLA
+
+**Members**: Zhiyi Zhang, Siqi Liu
+
+**Advisor**: Lixia Zhang
 
 ## Step 1: Prepare Multiparty Signature Library
 
@@ -123,4 +133,4 @@ Nov 18 2020, Zhiyi
 
 * **Estimated time**
 
-  1 week
+  2 week

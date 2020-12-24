@@ -9,41 +9,42 @@
 * Each signed packet, including a not-yet-aggregated signed packet, should be identified by a different name (unique packet, unique name).
 * The packets signed by signers can be merged into a single packet (that's why we use BLS).
 * Each aggregated packet should refer the signing information to the scheme and other information so that a verfier has enough knowledge to know which keys should be used in verification (key info is needed for a signature with complex semantics).
+* This library is a supporting library to multi-sign a packet based on the application needs, so our library aims to make minimum change to the application logic (e.g., name and content of packet to be signed).
 
 ## Overview
 
 ![Overview](protocol.jpg)
 
-Parties (in practice, a node can play more than one roles):
+### Parties
+
+In practice, a node can play more than one roles
 
 * Initiator, `I`
 * Signer, `S`
 * Verifier, `V`
 
-An overview:
+### Main workflow
 
 * A party called initiator collects signatures from multiple signers with NDN based remote procedure call (RPC)
 * The initiator verifies each returned signature and aggregates them with the original data into one signed data object
 * The verifier verifies the data object
 
-In NDN-MPS protocol, we have following main design choices:
+### Main design choices
 
 * We utilize a new NDN based RPC to collect signatures from signers, modified from RICE (ICN 2019).
 * We propose a new type of key locator to carry complicated signature information. In our case, is the schema and the exact keys involved in the signature signing.
 
-Also, we have following considerations:
+### Assumptions
 
-* This library is for signature signing based on what the application wants, which is below the application logic.
-So our library should take whatever name specified by the app instead of modifying the name with suffix or prefix. Taking some steps back, our lib does not block apps from using names with policies in it.
-* Similarly, this library does not make assumptions on (i) how signers' certificates are installed to the initiator or verifier, (ii) how verifier knows and fetches the signed packet,  (iii) how verifier obtains the schema to decide whether a packet is trusted or not.
-
-Prerequisites of a successful multiparty signature signing process:
+To perform a successful multiparty signature signing process:
 
 * `S` takes the rules (schema) of the multiparty signature as input
 * `V` knows the rules (schema) of verifying multiparty signature.
 * A `S` can verify `I`'s request. This requires `S` can verify `I`'s identity, e.g., by installing its certificate in advance.
 * `I` can verifie each `S`'s replied data. This requires `I` can verify each `S`'s identity, e.g., by installing each `S`'s certificate in advance.
 * A `V` can verify the aggregated signature. This requires `V` can verify each involved signer's identity, e.g., by installing each `S`'s certificate in advance.
+
+This library does not make assumptions on (i) how signers' certificates are installed to the initiator or verifier, (ii) how verifier knows and fetches the signed packet,  (iii) how verifier obtains the schema to decide whether a packet is trusted or not.
 
 ## Protocol Description
 
