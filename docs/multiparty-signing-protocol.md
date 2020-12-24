@@ -14,9 +14,21 @@
 
 ![Overview](protocol.jpg)
 
-In NDN-MPS protocol, we have following main design:
+Parties (in practice, a node can play more than one roles):
 
-* We utilize a new NDN based remote procedure call (RPC) to collect signatures from signers, modified from RICE (ICN 2019).
+* Initiator, `I`
+* Signer, `S`
+* Verifier, `V`
+
+An overview:
+
+* A party called initiator collects signatures from multiple signers with NDN based remote procedure call (RPC)
+* The initiator verifies each returned signature and aggregates them with the original data into one signed data object
+* The verifier verifies the data object
+
+In NDN-MPS protocol, we have following main design choices:
+
+* We utilize a new NDN based RPC to collect signatures from signers, modified from RICE (ICN 2019).
 * We propose a new type of key locator to carry complicated signature information. In our case, is the schema and the exact keys involved in the signature signing.
 
 Also, we have following considerations:
@@ -25,27 +37,26 @@ Also, we have following considerations:
 So our library should take whatever name specified by the app instead of modifying the name with suffix or prefix. Taking some steps back, our lib does not block apps from using names with policies in it.
 * Similarly, this library does not make assumptions on (i) how signers' certificates are installed to the initiator or verifier, (ii) how verifier knows and fetches the signed packet,  (iii) how verifier obtains the schema to decide whether a packet is trusted or not.
 
+Prerequisites of a successful multiparty signature signing process:
+
+* `S` takes the rules (schema) of the multiparty signature as input
+* `V` knows the rules (schema) of verifying multiparty signature.
+* A `S` can verify `I`'s request. This requires `S` can verify `I`'s identity, e.g., by installing its certificate in advance.
+* `I` can verifie each `S`'s replied data. This requires `I` can verify each `S`'s identity, e.g., by installing each `S`'s certificate in advance.
+* A `V` can verify the aggregated signature. This requires `V` can verify each involved signer's identity, e.g., by installing each `S`'s certificate in advance.
+
 ## Protocol Description
-
-Roles (in practice, a node can play more than one roles):
-
-* Initiator, `I`
-* Signer, `S`
-* Verifier, `V`
 
 Packets:
 
 * Unsigned Data packet, `D_Unsigned`
-* A Data packet signed by `S`1, `D_S1`
+* A signed Data packet by `S1`, `D_Signed_S1`
 * Aggregated signed data packet, `D_agg`
 * Signing info file `D_info`
 
-Prerequisites of a successful multiparty signature signing process:
-
-* A `S` can verify `I`'s request. This requires `S` can verify `I`'s identity, e.g., by installing its certificate in advance.
-* A `V` can verify the aggregated signature. This requires `V` can verify each involved signer's identity, e.g., by installing each `S`'s certificate in advance.
-
 ### Phase 1: Signature collection
+
+---
 
 **Input**: A scheme defined by the application.
 
@@ -54,37 +65,51 @@ Prerequisites of a successful multiparty signature signing process:
 Phase 1 consists of multiple transactions between `I` and each `S` (`S`1 to `S`n).
 Specifically, for each `I` and `S`, the protocol sets:
 
-* `I` sends an Interest packet `Int1` to signer `S`. The packet is signed by I so that S can verifies I's identity and packet's authenticity.
+* `I` sends an Interest packet `SignRequest` to signer `S`. The packet is signed by I so that S can verifies I's identity and packet's authenticity.
 
-  - Name: `/S/mps/sign/[hash]`
-  - Application parameter:
+  * Name: `/S/mps/sign/[hash]`
+  * Application parameter:
 
-    + `Name_D_Unsigned`, The name of the `D_Unsigned`, e.g., `/example/data`. When the data object contains more than one packets, e.g., a large file, a manifest Data packet should be put here.
-    + `Sha256_D_Unsigned`, The hash of the `D_Unsigned`.
-    + `KeyLocator_Name`, The key locator used in `S`'s signing process, which is the name of the signing info Data packet `D_info`, e.g., `/I/mps/schema/example/data/[version]`.
+    * `Name_D_Unsigned`, The name of the `D_Unsigned`, e.g., `/example/data`. When the data object contains more than one packets, e.g., a large file, a manifest Data packet should be put here.
+    * `Sha256_D_Unsigned`, The hash of the `D_Unsigned`.
+    * `KeyLocator_Name`, The key locator used in `S`'s signing process, which is the name of the signing info Data packet `D_info`, e.g., `/I/mps/schema/example/data/[version]`.
+    * Optional `ForwardingHint`, the forwarding hint of the initiator.
 
-  - Signature: Signed by `I`'s key
+  * Signature: Signed by `I`'s key
 
-* `S` verifies the Interest packet, fetches the `Int1.D_Unsigned`, verifies its hash against `Int1.Sha256_D_Unsigned`. If success and `S`'s application logic agrees to sign it, `S` uses its private key `sk_S` to sign the packet and encapsulate it into a wrapper Data packet `Dat1`. `S` replies `Dat1` backs to `I`
+* `S` verifies the Interest packet and replies `Ack`, an acknowledgement of the request if `S` is available.
 
-  - Data Name: `/S/mps/sign/[hash]`
-  - Data content:
+    * Name: `/S/mps/sign/[hash]`
+    * Content:
 
-    + Data Name: `Int1.Name_D_Unsigned`, e.g., `/example/data`
-    + Data content
-    + Signature Info: KeyType: BLS; KeyLocator: `Int1.KeyLocator_Name`
-    + Signature Value
+      * `Status`, Status code: 200 OK, 500 Internal Error, 503 Unavailable
+      * `Result_after`, Estimated time of finishing the signing process.
+      * `Result_name`, the future result Data packet name `D_Signed_S.Name` (does not contain version, timestamp, or implicit digest).
 
-  - Signature info: SHA256 signature
-  - Signature Value: SHA256
+    * Signature: Signed by `S`'s key
+
+* `S` fetches the Data `D_Unsigned` using the name in `SignRequest.D_Unsigned`, verifies its hash against `SignRequest.Sha256_D_Unsigned`. If succeeds and `S` agrees to sign it, `S` uses its private key to sign the packet and encapsulate it into a wrapper Data packet `D_Signed_S`. Then, `S` publishes `D_Signed_S`.
+
+  * Data Name: `/S/mps/result-of/[hash]`
+  * Data content:
+
+    * Data Name: `SignRequest.Name_D_Unsigned`, e.g., `/example/data`
+    * Data content
+    * Signature Info: KeyType: BLS; KeyLocator: `SignRequest.KeyLocator_Name`
+    * Signature Value
+
+  * Signature info: SHA256 signature
+  * Signature Value: SHA256
 
 ### Phase 2: Signature Aggregation
 
-**Input**: A list of signed inner packets, `D_S1` to `D_Sn`.
+---
+
+**Input**: A list of signed inner packets, `D_Signed_S1` to `D_Signed_Sn`.
 
 **Output**: A single signed packet `D_agg`, a schema data packet for this `D_agg`.
 
-After performing signature collection process with each `S` (in parallel to achieve high throughput), now `I` owns a list of signed inner packets, `D_S1` to `D_Sn`.
+After performing signature collection process with each `S` (in parallel to achieve high throughput), now `I` owns a list of signed inner packets, `D_Signed_S1` to `D_Signed_Sn`.
 
 Now `I` will:
 
@@ -92,21 +117,23 @@ Now `I` will:
 * Invoke the BLS function to aggregate all the involved public keys into one public key
 * Generate `D_agg` by setting a `D_Unsigned` packet
 
-  - Signature info: KeyType: BLS; KeyLocator: `Int1.KeyLocator_Name`
-  - Signature value: the aggregated signature value
+  * Signature info: KeyType: BLS; KeyLocator: `SignRequest.KeyLocator_Name`
+  * Signature value: the aggregated signature value
 
 * Generate `D_info` packet
 
-  - Data name: `Int1.KeyLocator_Name`
-  - Data content:
+  * Data name: `SignRequest.KeyLocator_Name`
+  * Data content:
 
-    + `schema`, The schema
-    + `signers`, The involved signer (if a k-out-of-n rule applies)
-    + `pk_agg`, The aggregated public key
+    * `schema`, The schema
+    * `signers`, The involved signer (if a k-out-of-n rule applies)
+    * `pk_agg`, The aggregated public key
 
-  - Signed by `I`
+  * Signed by `I`
 
 ### Phase 3: Signature Verification
+
+---
 
 **Input**: A single signed packet `D_agg`.
 
