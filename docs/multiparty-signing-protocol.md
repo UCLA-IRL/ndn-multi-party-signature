@@ -71,8 +71,7 @@ Specifically, for each `I` and `S`, the protocol sets:
   * Name: `/S/mps/sign/[hash]`
   * Application parameter:
 
-    * `Name_D_Unsigned`, The name of the `D_Unsigned`, e.g., `/example/data`. When the data object contains more than one packets, e.g., a large file, a manifest Data packet should be put here.
-    * `Sha256_D_Unsigned`, The hash of the `D_Unsigned`.
+    * `Unsigned_Wrapper_Name` + implicit digest, The name of a wrapper packet whose content is `D_Unsigned`. When the data object to be signed contains more than one packets, e.g., a large file, a manifest Data packet should be put here.
     * `KeyLocator_Name`, The key locator used in `S`'s signing process, which is the name of the signing info Data packet `D_info`, e.g., `/I/mps/schema/example/data/[version]`.
     * Optional `ForwardingHint`, the forwarding hint of the initiator.
 
@@ -89,15 +88,12 @@ Specifically, for each `I` and `S`, the protocol sets:
 
     * Signature: Signed by `S`'s key
 
-* `S` fetches the Data `D_Unsigned` using the name in `SignRequest.D_Unsigned`, verifies its hash against `SignRequest.Sha256_D_Unsigned`. If succeeds and `S` agrees to sign it, `S` uses its private key to sign the packet and encapsulate it into a wrapper Data packet `D_Signed_S`. Then, `S` publishes `D_Signed_S`.
+* `S` fetches the wrapper Data using the name in `SignRequest.Unsigned_Wrapper_Name`, verifies its digest against the implicit digest name component. If succeeds and `S` agrees to sign it, `S` uses its private key to sign the packet `D_Signed_S` and put the signature value into the result packet. Then, `S` publishes the result packet.
 
   * Data Name: `/S/mps/result-of/[hash]`
   * Data content:
 
-    * Data Name: `SignRequest.Name_D_Unsigned`, e.g., `/example/data`
-    * Data content
-    * Signature Info: KeyType: BLS; KeyLocator: `SignRequest.KeyLocator_Name`
-    * Signature Value
+    * Signature Value of `D_Signed_S`. Note the keylocator must be `SignRequest.KeyLocator_Name`
 
   * Signature info: SHA256 signature
   * Signature Value: SHA256
