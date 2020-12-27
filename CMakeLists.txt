@@ -3,12 +3,18 @@ cmake_minimum_required(VERSION 3.12)
 include(ExternalProject)
 include(FetchContent)
 
-if(NOT "${CMAKE_SOURCE_DIR}/external/bls/lib/libbls384_256.a")
+set(BLS_ROOT ${CMAKE_SOURCE_DIR}/external/bls)
+set(MCL_ROOT ${CMAKE_SOURCE_DIR}/external/mcl)
+
+if(NOT EXISTS "${MCL_ROOT}/lib/libmcl.a")
    execute_process(COMMAND make lib/libmcl.a
-   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/external/mcl)
+   WORKING_DIRECTORY ${MCL_ROOT})
+endif(NOT EXISTS "${MCL_ROOT}/lib/libmcl.a")
+
+if(NOT EXISTS "${BLS_ROOT}/lib/libbls384_256.a")
    execute_process(COMMAND make BLS_ETH=1 MCL_USE_GMP=0 lib/libbls384_256.a
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/external/bls)
-endif(NOT "${CMAKE_SOURCE_DIR}/external/bls/lib/libbls384_256.a")
+    WORKING_DIRECTORY ${BLS_ROOT})
+endif(NOT EXISTS "${BLS_ROOT}/lib/libbls384_256.a")
 
 FetchContent_Declare(json
   GIT_REPOSITORY https://github.com/nlohmann/json.git
@@ -32,9 +38,6 @@ set(CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointe
 # dependencies
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(NDN_CXX REQUIRED IMPORTED_TARGET libndn-cxx)
-
-set(BLS_ROOT ${CMAKE_SOURCE_DIR}/external/bls)
-set(MCL_ROOT ${CMAKE_SOURCE_DIR}/external/mcl)
 
 # files
 file(GLOB NDN_MPS_SRC

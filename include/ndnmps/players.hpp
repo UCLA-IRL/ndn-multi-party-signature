@@ -1,4 +1,5 @@
-#include <bls/bls384_256.h>
+#include <mcl/bn_c384_256.h>
+#include <bls/bls.h>
 #include <ndn-cxx/data.hpp>
 
 #include <iostream>
@@ -18,6 +19,12 @@ public:
    */
   void
   initKey();
+
+  /**
+   * @brief Initialize public and secret key pair from secret key serialization.
+   */
+  void
+  initKey(Buffer secretKeyBuf);
 
   /**
    * @brief Get public key.
