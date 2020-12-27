@@ -6,10 +6,10 @@ include(FetchContent)
 set(BLS_ROOT ${CMAKE_SOURCE_DIR}/external/bls)
 set(MCL_ROOT ${CMAKE_SOURCE_DIR}/external/mcl)
 
-if(NOT EXISTS "${MCL_ROOT}/lib/libmcl.a")
-   execute_process(COMMAND make lib/libmcl.a
+if((NOT EXISTS "${MCL_ROOT}/lib/libmcl.a") OR (NOT EXISTS "${MCL_ROOT}/lib/libmclbn384_256.a"))
+   execute_process(COMMAND make lib/libmcl.a lib/libmclbn384_256.a
    WORKING_DIRECTORY ${MCL_ROOT})
-endif(NOT EXISTS "${MCL_ROOT}/lib/libmcl.a")
+endif((NOT EXISTS "${MCL_ROOT}/lib/libmcl.a") OR (NOT EXISTS "${MCL_ROOT}/lib/libmclbn384_256.a"))
 
 if(NOT EXISTS "${BLS_ROOT}/lib/libbls384_256.a")
    execute_process(COMMAND make BLS_ETH=1 MCL_USE_GMP=0 lib/libbls384_256.a
@@ -37,13 +37,12 @@ set(CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointe
 
 # dependencies
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(NDN_CXX REQUIRED IMPORTED_TARGET libndn-cxx)
+pkg_check_modules(NDN_CXX REQUIRED libndn-cxx)
 
 # files
 file(GLOB NDN_MPS_SRC
     "./src/*.hpp"
-    "./src/*.cpp"
-    "./include/ndnmps/*.hpp")
+    "./src/*.cpp")
 
 # include
 include_directories(${NDN_CXX_INCLUDE_DIRS})
@@ -58,8 +57,9 @@ add_library(ndnmps SHARED "")
 target_sources(ndnmps PRIVATE ${NDN_MPS_SRC})
 target_include_directories(ndnmps PUBLIC ./include)
 target_include_directories(ndnmps PRIVATE ./src)
+target_compile_options(ndnmps PUBLIC ${NDN_CXX_CFLAGS} )
 target_link_libraries(ndnmps PUBLIC
-PkgConfig::NDN_CXX
+${NDN_CXX_LIBRARIES}
 ${CMAKE_SOURCE_DIR}/external/mcl/lib/libmcl.a
 ${CMAKE_SOURCE_DIR}/external/bls/lib/libbls384_256.a
 nlohmann_json::nlohmann_json)

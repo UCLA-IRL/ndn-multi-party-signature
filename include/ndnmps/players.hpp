@@ -17,14 +17,12 @@ public:
   /**
    * @brief Generate public and secret key pair.
    */
-  void
-  initKey();
+  Signer();
 
   /**
    * @brief Initialize public and secret key pair from secret key serialization.
    */
-  void
-  initKey(Buffer secretKeyBuf);
+  Signer(Buffer secretKeyBuf);
 
   /**
    * @brief Get public key.
@@ -44,6 +42,9 @@ private:
   std::map<std::string, blsPublicKey> m_certs;
 
 public:
+
+  Verifier();
+
   void
   addCert(const std::string& keyName, blsPublicKey pk);
 
@@ -56,6 +57,9 @@ typedef function<void(const Data& unfinishedData, const std::string& reason)> Si
 
 class Initiator {
 public:
+
+  Initiator();
+
   void
   startSigningProcess(const MultipartySchema& schema, const Data& unfinishedData,
                       const SignatureFinishCallback& successCb, const SignatureFailureCallback& failureCab);
