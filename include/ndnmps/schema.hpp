@@ -6,11 +6,10 @@ using Json = nlohmann::json;
 
 namespace ndn {
 
-class WildCardName {
-private:
-  std::string m_name;
+class WildCardName: public Name {
 public:
-  WildCardName(const std::string& name);
+
+  using Name::Name;
 
   bool
   match(const Name& name);
@@ -22,7 +21,6 @@ public:
 class MultipartySchema
 {
 public:
-  Json content;
   Name prefix;
   std::string ruleId;
   std::list<WildCardName> signers;
@@ -38,6 +36,8 @@ public:
 
   std::string
   toString();
+private:
+  static void parseAssert(bool criterion);
 };
 
 } // namespace ndn

@@ -1,5 +1,5 @@
 #include <mcl/bn_c384_256.h>
-#include <bls/bls.h>
+#include <bls/bls.hpp>
 #include <ndn-cxx/data.hpp>
 
 #include <iostream>
