@@ -7,7 +7,7 @@
       "key-format": "/example/b/KEY/_/_"
     },
     "at-least": {
-      "num": "2",
+      "num": 2,
       "key-format": "/example/c/KEY/_/_",
       "key-format": "/example/d/KEY/_/_",
       "key-format": "/example/e/KEY/_/_"

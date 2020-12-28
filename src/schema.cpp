@@ -5,7 +5,8 @@
 namespace ndn {
 
 bool
-WildCardName::match(const Name& name){
+WildCardName::match(const Name& name) const
+{
     if (this->size() != name.size()) return false;
     for (int i = 0; i < size(); i ++) {
         if (readString(this->get(i)) != "_" && readString(this->get(i)) != readString(name.get(i))) {
@@ -39,14 +40,14 @@ MultipartySchema::fromString(const std::string& configStr)
   Json signedBy = *content.find("signed-by");
 
   parseAssert(signedBy.is_object());
-  if (signedBy.find("all-of") != content.end()) {
+  if (signedBy.find("all-of") != signedBy.end()) {
       parseAssert(signedBy["all-of"].is_object());
       for (auto& party : signedBy["all-of"].items()) {
           parseAssert(party.key() == "key-format" && party.value().is_string());
           schema.signers.emplace_back(party.value().get<std::string>());
       }
   }
-  if (signedBy.find("at-least") != content.end()) {
+  if (signedBy.find("at-least") != signedBy.end()) {
       parseAssert(signedBy["at-least"].is_object());
       for (auto& party : signedBy["at-least"].items()) {
           if (party.key() == "num" && party.value().is_number_unsigned()) {

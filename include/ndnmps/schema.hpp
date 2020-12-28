@@ -12,20 +12,21 @@ public:
   using Name::Name;
 
   bool
-  match(const Name& name);
+  match(const Name& name) const;
 };
 
 /**
  * @brief JSON based configuration file to guide signing and verification.
+ * TODO can be let a schema refer to other schema? we can make much more complex rules from it.
  */
 class MultipartySchema
 {
 public:
   Name prefix;
   std::string ruleId;
-  std::list<WildCardName> signers;
+  std::vector<WildCardName> signers;
   size_t minOptionalSigners;
-  std::list<WildCardName> optionalSigners;
+  std::vector<WildCardName> optionalSigners;
 
 public:
   static MultipartySchema

@@ -5,7 +5,8 @@ namespace ndn {
 class MultiPartySignature
 {
 private:
-  /* data */
+    SignatureInfo m_info;
+    mutable Block m_value;
 public:
   MultiPartySignature(/* args */);
   ~MultiPartySignature();

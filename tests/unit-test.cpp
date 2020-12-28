@@ -7,21 +7,7 @@ namespace ndn {
 void
 testSchema()
 {
-  std::string configStr = R"({
-    "pi": 3.141,
-    "happy": true,
-    "name": "Niels",
-    "nothing": null,
-    "answer": {
-      "everything": 42
-    },
-    "list": [1, 0, 2],
-    "object": {
-      "currency": "USD",
-      "value": 42.99
-    }
-  })";
-  auto schema = MultipartySchema::fromString(configStr);
+  auto schema = MultipartySchema::fromFile("sample-schema.json");
   std::cout << schema.toString() << std::endl;
 }
 

@@ -1,10 +1,11 @@
+#include "ndnmps/schema.hpp"
+#include "multi-party-key-locator.hpp"
 #include <mcl/bn_c384_256.h>
 #include <bls/bls.hpp>
 #include <ndn-cxx/data.hpp>
 
 #include <iostream>
 #include <map>
-#include "ndnmps/schema.hpp"
 
 namespace ndn {
 
@@ -35,21 +36,34 @@ public:
    */
   std::vector<uint8_t>
   getpublicKeyStr();
+
+  /**
+   * Return the signature value for the packet.
+   * @param data the unsigned data packet
+   * @param sigInfo the signature info to be used
+   * @return the signature value signed by this signer
+   */
+  Block
+  getSignature(Data data, const SignatureInfo& sigInfo);
 };
 
 class Verifier {
 private:
-  std::map<std::string, blsPublicKey> m_certs;
+  std::map<Name, blsPublicKey> m_certs;
 
 public:
 
   Verifier();
 
   void
-  addCert(const std::string& keyName, blsPublicKey pk);
+  addCert(const Name& keyName, blsPublicKey pk);
 
-  void
-  verifySignature(const blsSignature& sig, const MultipartySchema& schema);
+  bool
+  verifySignature(const Data& data, const MultipartySchema& schema);
+
+public:
+  static bool
+  verifyKeyLocator(const MultiPartyKeyLocator& locator, const MultipartySchema& schema);
 };
 
 typedef function<void(const Data& signedData)> SignatureFinishCallback;
