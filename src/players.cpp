@@ -45,8 +45,7 @@ Signer::getPublicKey()
 std::vector<uint8_t>
 Signer::getpublicKeyStr()
 {
-    int size = blsGetSerializedPublicKeyByteSize();
-    std::vector<uint8_t> outputBuf(size);
+    std::vector<uint8_t> outputBuf(blsGetSerializedPublicKeyByteSize());
     int written_size = blsPublicKeySerialize(outputBuf.data(), outputBuf.size(), &m_pk);
     if (written_size == 0) {
         NDN_THROW(std::runtime_error("Fail to write public key in Signer::getpublicKeyStr()"));
@@ -70,8 +69,11 @@ Signer::getSignature(Data data, const SignatureInfo& sigInfo)
     blsSignature sig;
     blsSign(&sig, &m_sk, encoder.buf(), encoder.size());
     auto signatureBuf = make_shared<Buffer>(blsGetSerializedSignatureByteSize());
-    blsSignatureSerialize(signatureBuf->data(), signatureBuf->size(), &sig);
-
+    auto written_size = blsSignatureSerialize(signatureBuf->data(), signatureBuf->size(), &sig);
+    if (written_size == 0) {
+        NDN_THROW(std::runtime_error("Error on serializing signature"));
+    }
+    signatureBuf->resize(written_size);
     return Block(tlv::SignatureValue, signatureBuf);
 }
 
@@ -108,10 +110,17 @@ Verifier::verifySignature(const Data& data, const MultipartySchema& schema)
     blsSignature sig;
     if (blsSignatureDeserialize(&sig, sigValue.value(), sigValue.value_size()) == 0) return false;
 
-    EncodingBuffer encoder;
-    data.wireEncode(encoder, true);
-
-    return blsFastAggregateVerify(&sig, keys.data(), keys.size(), encoder.buf(), encoder.size());
+    auto signedRanges = data.extractSignedRanges();
+    if (signedRanges.size() == 1) { // to avoid copying in current ndn-cxx impl
+        const auto& it = signedRanges.begin();
+        return blsFastAggregateVerify(&sig, keys.data(), keys.size(), it->first, it->second);
+    } else {
+        EncodingBuffer encoder;
+        for (const auto &it : signedRanges) {
+            encoder.appendByteArray(it.first, it.second);
+        }
+        return blsFastAggregateVerify(&sig, keys.data(), keys.size(), encoder.buf(), encoder.size());
+    }
 }
 
 bool
@@ -140,6 +149,29 @@ Verifier::verifyKeyLocator(const MultiPartyKeyLocator& locator, const Multiparty
 Initiator::Initiator()
 {
     bls_library_init();
+}
+
+void
+Initiator::buildMultiSignature(Data& data, const SignatureInfo& sigInfo, const std::vector<blsSignature>& collectedPiece)
+{
+
+    data.setSignatureInfo(sigInfo);
+
+    EncodingBuffer encoder;
+    data.wireEncode(encoder, true);
+
+    blsSignature outputSig;
+    blsAggregateSignature(&outputSig, collectedPiece.data(), collectedPiece.size());
+    auto sigBuffer = make_shared<Buffer>(blsGetSerializedSignatureByteSize());
+    auto writtenSize = blsSignatureSerialize(sigBuffer->data(), sigBuffer->size(), &outputSig);
+    if (writtenSize == 0) {
+        NDN_THROW(std::runtime_error("Error on serializing"));
+    }
+    sigBuffer->resize(writtenSize);
+
+    Block sigValue(tlv::SignatureValue,sigBuffer);
+
+    data.wireEncode(encoder, sigValue);
 }
 
 } // namespace ndn

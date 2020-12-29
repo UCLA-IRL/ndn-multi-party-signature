@@ -74,6 +74,10 @@ public:
 
   Initiator();
 
+  static void
+  buildMultiSignature(Data& data, const SignatureInfo& sigInfo,
+          const std::vector<blsSignature>& collectedPiece);
+
   void
   startSigningProcess(const MultipartySchema& schema, const Data& unfinishedData,
                       const SignatureFinishCallback& successCb, const SignatureFailureCallback& failureCab);
