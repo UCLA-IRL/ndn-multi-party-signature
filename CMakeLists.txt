@@ -53,7 +53,7 @@ include_directories(${BLS_ROOT}/include)
 link_directories(${NDN_CXX_LIBRARY_DIRS})
 
 # target
-add_library(ndnmps SHARED "" src/multi-party-key-locator.cpp include/ndnmps/multi-party-key-locator.hpp)
+add_library(ndnmps SHARED "")
 target_sources(ndnmps PRIVATE ${NDN_MPS_SRC})
 target_include_directories(ndnmps PUBLIC ./include)
 target_include_directories(ndnmps PRIVATE ./src)

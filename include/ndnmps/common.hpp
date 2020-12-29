@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <iostream>
+#include <ndn-cxx/encoding/tlv.hpp>
 namespace ndn {
 namespace tlv {
 
@@ -10,25 +11,25 @@ enum : uint32_t {
     MultiPartyKeyLocator = 201,
 };
 
-/** @brief SignatureType values
+/** @brief Extended SignatureType values with Multi-Party Signature
  *  @sa https://named-data.net/doc/NDN-packet-spec/current/signature.html
  */
-enum ExtendedSignatureTypeValue : uint16_t {
-    //DigestSha256             = 0,
-    //SignatureSha256WithRsa   = 1,
-    //SignatureSha256WithEcdsa = 3,
-    //SignatureHmacWithSha256  = 4,
-    SignatureSha256WithBls   = 64,
+enum MpsSignatureTypeValue : uint16_t {
+    MpsDigestSha256             = SignatureTypeValue::DigestSha256,
+    MpsSignatureSha256WithRsa   = SignatureTypeValue::SignatureSha256WithRsa,
+    MpsSignatureSha256WithEcdsa = SignatureTypeValue::SignatureSha256WithEcdsa,
+    MpsSignatureHmacWithSha256  = SignatureTypeValue::SignatureHmacWithSha256,
+    MpsSignatureSha256WithBls   = 64,
 };
 
 std::ostream&
-operator<<(std::ostream& os, ExtendedSignatureTypeValue st);
+operator<<(std::ostream& os, MpsSignatureTypeValue st);
 }
 
 /**
- * @brief The type of a cryptographic key.
+ * @brief The extended type of a cryptographic key with Multi-Party Signature.
  */
-enum class ExtendedKeyType {
+enum class MpsKeyType {
     NONE = 0, ///< Unknown or unsupported key type
     RSA,      ///< RSA key, supports sign/verify and encrypt/decrypt operations
     EC,       ///< Elliptic Curve key (e.g. for ECDSA), supports sign/verify operations
@@ -38,7 +39,7 @@ enum class ExtendedKeyType {
 };
 
 std::ostream&
-operator<<(std::ostream& os, ExtendedKeyType keyType);
+operator<<(std::ostream& os, MpsKeyType keyType);
 }
 
 #endif // NDNMPS_COMMON_HPP

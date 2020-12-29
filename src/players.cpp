@@ -57,7 +57,7 @@ Signer::getpublicKeyStr()
 Block
 Signer::getSignature(Data data, const SignatureInfo& sigInfo)
 {
-    if (sigInfo.getSignatureType() != tlv::SignatureSha256WithBls) {
+    if (sigInfo.getSignatureType() != tlv::MpsSignatureSha256WithBls) {
         NDN_THROW(std::runtime_error("Signer got non-BLS signature type"));
     }
 

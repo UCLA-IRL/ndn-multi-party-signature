@@ -5,18 +5,18 @@ namespace ndn {
 namespace tlv {
 
 std::ostream&
-operator<<(std::ostream& os, ExtendedSignatureTypeValue st)
+operator<<(std::ostream& os, MpsSignatureTypeValue st)
 {
     switch (st) {
-        case ExtendedSignatureTypeValue::DigestSha256:
+        case MpsDigestSha256:
             return os << "DigestSha256";
-        case ExtendedSignatureTypeValue::SignatureSha256WithRsa:
+        case MpsSignatureSha256WithRsa:
             return os << "SignatureSha256WithRsa";
-        case ExtendedSignatureTypeValue::SignatureSha256WithEcdsa:
+        case MpsSignatureSha256WithEcdsa:
             return os << "SignatureSha256WithEcdsa";
-        case ExtendedSignatureTypeValue::SignatureHmacWithSha256:
+        case MpsSignatureHmacWithSha256:
             return os << "SignatureHmacWithSha256";
-        case ExtendedSignatureTypeValue::SignatureSha256WithBls:
+        case MpsSignatureSha256WithBls:
             return os << "SignatureSha256WithBls";
     }
     return os << "Unknown(" << static_cast<uint32_t>(st) << ')';
@@ -25,20 +25,20 @@ operator<<(std::ostream& os, ExtendedSignatureTypeValue st)
 }
 
 std::ostream&
-operator<<(std::ostream& os, ExtendedKeyType keyType)
+operator<<(std::ostream& os, MpsKeyType keyType)
 {
     switch (keyType) {
-        case ExtendedKeyType::NONE:
+        case MpsKeyType::NONE:
             return os << "NONE";
-        case ExtendedKeyType::RSA:
+        case MpsKeyType::RSA:
             return os << "RSA";
-        case ExtendedKeyType::EC:
+        case MpsKeyType::EC:
             return os << "EC";
-        case ExtendedKeyType::AES:
+        case MpsKeyType::AES:
             return os << "AES";
-        case ExtendedKeyType::BLS:
+        case MpsKeyType::BLS:
             return os << "BLS";
-        case ExtendedKeyType::HMAC:
+        case MpsKeyType::HMAC:
             return os << "HMAC";
         }
         return os << to_underlying(keyType);
