@@ -1,6 +1,7 @@
 #include "ndnmps/schema.hpp"
 #include <fstream>
 #include <sstream>
+#include <set>
 
 namespace ndn {
 
@@ -97,5 +98,102 @@ MultipartySchema::parseAssert(bool criterion)
         NDN_THROW(std::runtime_error("Invalid JSON type"));
     }
 }
+
+bool
+MultipartySchema::verifyKeyLocator(const MultiPartyKeyLocator& locator, const MultipartySchema& schema)
+{
+    std::vector<Name> keys;
+    std::vector<std::set<int>> matches;
+    for (const auto& signer: locator.getLocators()) {
+        if (signer.getType() != tlv::Name) return false;
+        // no repeated keys
+        if (std::find(keys.begin(), keys.end(), signer.getName()) != keys.end()) continue;
+        keys.emplace_back(signer.getName());
+        for (int i = 0; i < schema.signers.size(); i ++) {
+            if (schema.signers.at(i).match(signer.getName())) {
+                matches[i].emplace(keys.size() - 1);
+            }
+        }
+        for (int i = 0; i < schema.optionalSigners.size(); i ++) {
+            if (schema.optionalSigners.at(i).match(signer.getName())) {
+                matches[i + schema.signers.size()].emplace(keys.size() - 1);
+            }
+        }
+    }
+
+    //find matches by maximum flow
+    std::vector<std::pair<int, int>> out = modifiedFordFulkerson(matches, schema.signers.size(), schema.optionalSigners.size());
+
+    return out.size() >= schema.signers.size() + schema.minOptionalSigners;
+}
+
+std::vector<std::pair<int, int>>
+MultipartySchema::modifiedFordFulkerson(const std::vector<std::set<int>>& bipartiteAdjList, int mustHaveSize, int optionalSize)
+{
+    //node assignment: 0 as source, 1 as sink, 2 to mustHaveSize + optionalSize + 1 as position, rest as keys node.
+    //convert the bipartite Adjency list to flow graph
+    std::map<int, std::set<int>> adjList;
+    //position
+    for (int i = 2; i < mustHaveSize + optionalSize + 2; i ++) {
+        adjList[0].emplace(i);
+    }
+    //possible assignments
+    for (int i = 0; i < bipartiteAdjList.size(); i ++) {
+        for (auto val : bipartiteAdjList.at(i)) {
+            adjList[i + 2].emplace(val + mustHaveSize + optionalSize + 2);
+            adjList[val + mustHaveSize + optionalSize + 2].emplace(1);
+        }
+    }
+
+    //find augment path
+    std::list<int> augmentPath;
+    while (fordFulkersonDFS(adjList, 0, 1, augmentPath)) { // more augment path
+        for (auto it = augmentPath.begin(); it != augmentPath.end(); it ++) {
+            auto it2 = it;
+            it2 ++;
+            if (it2 == augmentPath.end()) break;
+
+            adjList[*it].erase(*it2);
+            if (!(*it == 0 && *it2 >= 2 && *it2 < 2 + mustHaveSize)) // only add reverse link if not a mustHave node
+                adjList[*it2].emplace(*it);
+        }
+        augmentPath.clear();
+    }
+
+    //check mustHave met
+    for (auto item : adjList[0]) {
+        if (item < 2 + mustHaveSize) return std::vector<std::pair<int, int>>();
+    }
+
+    //return
+    std::vector<std::pair<int, int>> ans;
+    for (auto keyNode : adjList[1]) {
+        assert(adjList[keyNode].size() == 1);
+        auto positionId = *adjList[keyNode].begin();
+        ans.emplace_back(positionId - 2, keyNode - mustHaveSize - optionalSize - 2);
+    }
+
+    return ans;
+}
+
+bool
+MultipartySchema::fordFulkersonDFS(const std::map<int, std::set<int>>& adjList, int start, int end, std::list<int>& path) {
+    path.emplace_back(start);
+    if (start == end) return true;
+    for (auto item : adjList.at(start)) {
+        bool visited = false;
+        for (auto pastItem : path) {
+            if (item == pastItem) {
+                visited = true;
+                break;
+            }
+        }
+        if (visited) continue; // prevent loop
+        if (fordFulkersonDFS(adjList, item, end, path)) return true;
+    }
+    path.pop_back();
+    return false;
+}
+
 
 } // namespace ndn

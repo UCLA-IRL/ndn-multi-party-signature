@@ -1,6 +1,8 @@
 #include <nlohmann/json.hpp>
+#include <set>
 #include <list>
 #include <ndn-cxx/name.hpp>
+#include "multi-party-key-locator.hpp"
 
 using Json = nlohmann::json;
 
@@ -37,8 +39,19 @@ public:
 
   std::string
   toString();
+public:
+    static bool
+    verifyKeyLocator(const MultiPartyKeyLocator& locator, const MultipartySchema& schema);
 private:
-  static void parseAssert(bool criterion);
+  static void
+  parseAssert(bool criterion);
+
+  static std::vector<std::pair<int, int>>
+  modifiedFordFulkerson(const std::vector<std::set<int>>& bipartiteAdjList,
+                        int mustHaveSize, int optionalSize);
+
+  static bool
+  fordFulkersonDFS(const std::map<int, std::set<int>>& adjList, int start, int end, std::list<int>& path);
 };
 
 } // namespace ndn

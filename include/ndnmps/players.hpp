@@ -61,9 +61,6 @@ public:
   bool
   verifySignature(const Data& data, const MultipartySchema& schema);
 
-public:
-  static bool
-  verifyKeyLocator(const MultiPartyKeyLocator& locator, const MultipartySchema& schema);
 };
 
 typedef function<void(const Data& signedData)> SignatureFinishCallback;
@@ -77,6 +74,9 @@ public:
   static void
   buildMultiSignature(Data& data, const SignatureInfo& sigInfo,
           const std::vector<blsSignature>& collectedPiece);
+
+  static optional<SignatureInfo>
+  getPossibleMPSignatureInfo(const MultipartySchema& schema, const std::vector<Name>& availableSingerKeys);
 
   void
   startSigningProcess(const MultipartySchema& schema, const Data& unfinishedData,

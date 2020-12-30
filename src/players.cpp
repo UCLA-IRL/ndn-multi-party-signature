@@ -95,7 +95,7 @@ Verifier::verifySignature(const Data& data, const MultipartySchema& schema)
     auto locatorBlock = sigInfo.getCustomTlv(tlv::MultiPartyKeyLocator);
     if (!locatorBlock) return false;
     auto locator = MultiPartyKeyLocator(*locatorBlock);
-    if (!verifyKeyLocator(locator, schema)) return false;
+    if (!MultipartySchema::verifyKeyLocator(locator, schema)) return false;
 
     //check signature
     std::vector<blsPublicKey> keys;
@@ -121,29 +121,6 @@ Verifier::verifySignature(const Data& data, const MultipartySchema& schema)
         }
         return blsFastAggregateVerify(&sig, keys.data(), keys.size(), encoder.buf(), encoder.size());
     }
-}
-
-bool
-Verifier::verifyKeyLocator(const MultiPartyKeyLocator& locator, const MultipartySchema& schema)
-{
-    std::set<int> verified;
-    std::set<int> optionalVerified;
-    for (const auto& signer: locator.getLocators()) {
-        if (signer.getType() != tlv::Name) return false;
-        for (int i = 0; i < schema.signers.size(); i ++) {
-            if (verified.count(i) != 0) continue;
-            if (schema.signers.at(i).match(signer.getName())) {
-                verified.emplace(i);
-            }
-        }
-        for (int i = 0; i < schema.optionalSigners.size(); i ++) {
-            if (verified.count(i) != 0) continue;
-            if (schema.optionalSigners.at(i).match(signer.getName())) {
-                verified.emplace(i);
-            }
-        }
-    }
-    return verified.size() == schema.signers.size() && optionalVerified.size() >= schema.minOptionalSigners;
 }
 
 Initiator::Initiator()
@@ -172,6 +149,22 @@ Initiator::buildMultiSignature(Data& data, const SignatureInfo& sigInfo, const s
     Block sigValue(tlv::SignatureValue,sigBuffer);
 
     data.wireEncode(encoder, sigValue);
+}
+
+optional<SignatureInfo>
+getPossibleMPSignatureInfo(const MultipartySchema& schema, const std::vector<Name>& availableSingerKeys)
+{
+    std::vector<KeyLocator> signers;
+    for (const auto& s : availableSingerKeys) {
+        signers.emplace_back(s);
+    }
+    MultiPartyKeyLocator locator(signers);
+    if (MultipartySchema::verifyKeyLocator(locator, schema)) {
+        SignatureInfo info(static_cast<tlv::SignatureTypeValue>(tlv::MpsSignatureSha256WithBls));
+        info.addCustomTlv(locator.wireEncode());
+        return info;
+    }
+    return nullopt;
 }
 
 } // namespace ndn
