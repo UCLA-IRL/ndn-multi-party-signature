@@ -127,6 +127,46 @@ MultipartySchema::verifyKeyLocator(const MultiPartyKeyLocator& locator, const Mu
     return out.size() >= schema.signers.size() + schema.minOptionalSigners;
 }
 
+optional<std::vector<Name>>
+MultipartySchema::getMinSigners(const std::vector<Name>& availableKeys)
+{
+    std::vector<std::set<int>> matches;
+    for (int keyId = 0; keyId < availableKeys.size(); keyId ++) {
+        for (int i = 0; i < signers.size(); i ++) {
+            if (signers.at(i).match(availableKeys[i])) {
+                matches[i].emplace(keyId);
+            }
+        }
+        for (int i = 0; i < optionalSigners.size(); i ++) {
+            if (optionalSigners.at(i).match(availableKeys[i])) {
+                matches[i + signers.size()].emplace(keyId);
+            }
+        }
+    }
+
+    //find matches by maximum flow
+    std::vector<std::pair<int, int>> out = modifiedFordFulkerson(matches, signers.size(), optionalSigners.size());
+
+    //translate back and filter to necessary only
+    std::vector<Name> ans;
+    int mustHaveCount = 0;
+    int optionalCount = 0;
+    for (auto item : out) {
+        if (item.first < signers.size()) { // must have
+            mustHaveCount ++;
+            ans.emplace_back(availableKeys[item.second]);
+        } else if (optionalCount < minOptionalSigners) {
+            optionalCount ++;
+            ans.emplace_back(availableKeys[item.second]);
+        }
+    }
+    if (mustHaveCount == signers.size() && optionalCount >= minOptionalSigners) {
+        return std::move(ans);
+    } else {
+        return nullopt;
+    }
+}
+
 std::vector<std::pair<int, int>>
 MultipartySchema::modifiedFordFulkerson(const std::vector<std::set<int>>& bipartiteAdjList, int mustHaveSize, int optionalSize)
 {

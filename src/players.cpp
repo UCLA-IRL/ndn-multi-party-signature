@@ -1,6 +1,7 @@
 #include <set>
 #include "ndnmps/players.hpp"
 #include "ndnmps/common.hpp"
+#include "ndnmps/multi-party-signature.hpp"
 
 namespace ndn {
 
@@ -152,19 +153,11 @@ Initiator::buildMultiSignature(Data& data, const SignatureInfo& sigInfo, const s
 }
 
 optional<SignatureInfo>
-getPossibleMPSignatureInfo(const MultipartySchema& schema, const std::vector<Name>& availableSingerKeys)
+Initiator::getMinMPSignatureInfo(const MultipartySchema& schema, const std::vector<Name>& availableSingerKeys)
 {
-    std::vector<KeyLocator> signers;
-    for (const auto& s : availableSingerKeys) {
-        signers.emplace_back(s);
-    }
-    MultiPartyKeyLocator locator(signers);
-    if (MultipartySchema::verifyKeyLocator(locator, schema)) {
-        SignatureInfo info(static_cast<tlv::SignatureTypeValue>(tlv::MpsSignatureSha256WithBls));
-        info.addCustomTlv(locator.wireEncode());
-        return info;
-    }
-    return nullopt;
+    auto result = MultipartySchema::getMinPossibleSignerInfo(schema, availableSingerKeys);
+    if (!result) return nullopt;
+    else return MultiPartySignature::getMultiPartySignatureInfo(*result);
 }
 
 } // namespace ndn

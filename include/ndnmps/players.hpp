@@ -76,7 +76,7 @@ public:
           const std::vector<blsSignature>& collectedPiece);
 
   static optional<SignatureInfo>
-  getPossibleMPSignatureInfo(const MultipartySchema& schema, const std::vector<Name>& availableSingerKeys);
+  getMinMPSignatureInfo(const MultipartySchema& schema, const std::vector<Name>& availableSingerKeys);
 
   void
   startSigningProcess(const MultipartySchema& schema, const Data& unfinishedData,

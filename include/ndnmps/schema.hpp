@@ -39,6 +39,10 @@ public:
 
   std::string
   toString();
+
+  optional<std::vector<Name>>
+  getMinSigners(const std::vector<Name>& availableKeys);
+
 public:
     static bool
     verifyKeyLocator(const MultiPartyKeyLocator& locator, const MultipartySchema& schema);
