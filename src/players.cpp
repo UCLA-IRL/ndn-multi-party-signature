@@ -78,6 +78,16 @@ Signer::getSignature(Data data, const SignatureInfo& sigInfo)
     return Block(tlv::SignatureValue, signatureBuf);
 }
 
+void
+Signer::sign(Data& data, const Name& keyName)
+{
+    SignatureInfo info(static_cast<tlv::SignatureTypeValue>(tlv::MpsSignatureSha256WithBls), KeyLocator(keyName));
+    auto signature = getSignature(data, info);
+
+    data.setSignatureInfo(info);
+    data.setSignatureValue(signature.getBuffer());
+}
+
 Verifier::Verifier()
 {
     bls_library_init();
@@ -94,8 +104,13 @@ Verifier::verifySignature(const Data& data, const MultipartySchema& schema)
 {
     auto sigInfo = data.getSignatureInfo();
     auto locatorBlock = sigInfo.getCustomTlv(tlv::MultiPartyKeyLocator);
-    if (!locatorBlock) return false;
-    auto locator = MultiPartyKeyLocator(*locatorBlock);
+    MultiPartyKeyLocator locator;
+    if (locatorBlock) {
+        locator.wireDecode(*locatorBlock);
+    } else {
+        if (sigInfo.getKeyLocator().getType() == tlv::Name)
+            locator.getMutableLocators().emplace_back(sigInfo.getKeyLocator().getName());
+    }
     if (!MultipartySchema::verifyKeyLocator(locator, schema)) return false;
 
     //check signature
@@ -121,6 +136,31 @@ Verifier::verifySignature(const Data& data, const MultipartySchema& schema)
             encoder.appendByteArray(it.first, it.second);
         }
         return blsFastAggregateVerify(&sig, keys.data(), keys.size(), encoder.buf(), encoder.size());
+    }
+}
+
+bool
+Verifier::verifySignaturePiece(Data data, const SignatureInfo& sigInfo, const Name& signedBy, const Block& signaturePiece) {
+    if (sigInfo.getSignatureType() != tlv::MpsSignatureSha256WithBls) {
+        NDN_THROW(std::runtime_error("Signer got non-BLS signature type"));
+    }
+
+    data.setSignatureInfo(sigInfo);
+
+    blsPublicKey publicKey = m_certs.at(signedBy);
+    blsSignature sig;
+    if (blsSignatureDeserialize(&sig, signaturePiece.value(), signaturePiece.value_size()) == 0) return false;
+
+    auto signedRanges = data.extractSignedRanges();
+    if (signedRanges.size() == 1) { // to avoid copying in current ndn-cxx impl
+        const auto& it = signedRanges.begin();
+        return blsVerify(&sig, &publicKey, it->first, it->second);
+    } else {
+        EncodingBuffer encoder;
+        for (const auto &it : signedRanges) {
+            encoder.appendByteArray(it.first, it.second);
+        }
+        return blsVerify(&sig, &publicKey, encoder.buf(), encoder.size());
     }
 }
 

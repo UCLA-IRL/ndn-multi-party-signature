@@ -45,6 +45,15 @@ public:
    */
   Block
   getSignature(Data data, const SignatureInfo& sigInfo);
+
+  /**
+   * sign the packet for the packet (as the only signer).
+   * @param data the unsigned data packet
+   * @param sigInfo the signature info to be used
+   * @return the signature value signed by this signer
+   */
+  void
+  sign(Data& data, const Name& keyName);
 };
 
 class Verifier {
@@ -61,6 +70,8 @@ public:
   bool
   verifySignature(const Data& data, const MultipartySchema& schema);
 
+  bool
+  verifySignaturePiece(Data data, const SignatureInfo& info, const Name& signedBy, const Block& signaturePiece);
 };
 
 typedef function<void(const Data& signedData)> SignatureFinishCallback;
