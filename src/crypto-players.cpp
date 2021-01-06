@@ -161,42 +161,60 @@ MpsVerifier::itemsToFetch(const Data& data) const
 bool
 MpsVerifier::verifySignature(const Data& data, const MultipartySchema& schema) const
 {
-    auto sigInfo = data.getSignatureInfo();
+    const auto& sigInfo = data.getSignatureInfo();
     MpsSignerList locator;
+    bool aggKeyInitialized = false;
+    blsPublicKey aggKey;
     if (sigInfo.getKeyLocator().getType() == tlv::Name) {
         if (m_signList.count(sigInfo.getKeyLocator().getName()) != 0) {
             locator = m_signList.at(sigInfo.getKeyLocator().getName());
+            if (m_aggregateKey.count(sigInfo.getKeyLocator().getName()) != 0) {
+                aggKey = m_aggregateKey.at(sigInfo.getKeyLocator().getName());
+                aggKeyInitialized = true;
+            }
         } else if (m_certs.count(sigInfo.getKeyLocator().getName()) != 0) {
             locator.getSigners().emplace_back(sigInfo.getKeyLocator().getName());
+            aggKey = m_certs.at(sigInfo.getKeyLocator().getName());
+            aggKeyInitialized = true;
         } else {
             return false;
         }
     }
     if (!schema.verifyKeyLocator(locator)) return false;
 
-    //check signature
-    std::vector<blsPublicKey> keys;
-    for (const auto& signer: locator.getSigners()) {
-        auto it = m_certs.find(signer);
-        if (it == m_certs.end()) return false;
-        keys.emplace_back(it->second);
+    //build public key if needed
+    if (!aggKeyInitialized) {
+        for (const auto &signer: locator.getSigners()) {
+            auto it = m_certs.find(signer);
+            if (it == m_certs.end()) return false;
+            if (aggKeyInitialized) {
+                blsPublicKeyAdd(&aggKey, &it->second);
+            } else {
+                aggKey = it->second;
+                aggKeyInitialized = true;
+            }
+        }
+        //store?
+        //TODO finish the cache implementation
+        //m_aggregateKey.emplace(sigInfo.getKeyLocator().getName(), aggKey);
     }
 
     //get signature value
-    auto sigValue = data.getSignatureValue();
+    const auto& sigValue = data.getSignatureValue();
     blsSignature sig;
     if (blsSignatureDeserialize(&sig, sigValue.value(), sigValue.value_size()) == 0) return false;
 
+    //verify
     auto signedRanges = data.extractSignedRanges();
     if (signedRanges.size() == 1) { // to avoid copying in current ndn-cxx impl
         const auto& it = signedRanges.begin();
-        return blsFastAggregateVerify(&sig, keys.data(), keys.size(), it->first, it->second);
+        return blsVerify(&sig, &aggKey, it->first, it->second);
     } else {
         EncodingBuffer encoder;
         for (const auto &it : signedRanges) {
             encoder.appendByteArray(it.first, it.second);
         }
-        return blsFastAggregateVerify(&sig, keys.data(), keys.size(), encoder.buf(), encoder.size());
+        return blsVerify(&sig, &aggKey, encoder.buf(), encoder.size());
     }
 }
 

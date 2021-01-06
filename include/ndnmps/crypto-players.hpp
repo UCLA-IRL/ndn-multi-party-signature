@@ -77,7 +77,7 @@ class MpsVerifier {
 private:
   std::map<Name, blsPublicKey> m_certs;
   std::map<Name, MpsSignerList> m_signList;
-  std::map<Name, blsPublicKey> m_aggregateKey; //should be cache, not from network transmission for security reasons
+  mutable std::map<Name, blsPublicKey> m_aggregateKey; //should be cache, not from network transmission for security reasons
 
 public:
 
