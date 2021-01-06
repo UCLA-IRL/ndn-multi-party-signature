@@ -5,6 +5,7 @@
 #include "mps-signer-list.hpp"
 #include "crypto-players.hpp"
 #include <ndn-cxx/data.hpp>
+#include <ndn-cxx/face.hpp>
 
 #include <iostream>
 #include <map>
@@ -29,18 +30,43 @@ public:
   getMpsSigner();
 };
 
-class Verifier {
+typedef function<void(bool)> VerifyFinishCallback;
+
+class Verifier: public MpsVerifier {
 private:
-  MpsVerifier m_verifier;
-
+    struct QueueRecord {
+        const Data& data;
+        const MultipartySchema& schema;
+        const VerifyFinishCallback& callback;
+        int itemLeft;
+    };
+    std::map<int, QueueRecord> m_queue;
+    int m_queueLast = 0;
+    std::map<Name, std::set<int>> m_index;
+    Face& m_face;
+    function<bool(const Data&)> m_certVerifyCallback;
 public:
-  Verifier(MpsVerifier verifier);
+    Verifier(MpsVerifier v, Face& face);
 
-  const MpsVerifier&
-  getMpsVerifier() const;
+    void
+    setCertVerifyCallback(function<bool(const Data&)> func);
 
-    MpsVerifier&
-  getMpsVerifier();
+    void
+    asyncVerifySignature(const Data& data, const MultipartySchema& schema, const VerifyFinishCallback& callback);
+
+private:
+    void
+    removeAll(const Name& name);
+
+    void
+    onData(const Interest&, const Data& data);
+
+    void
+    onNack(const Interest&, const lp::Nack& nack);
+
+    void
+    onTimeout(const Interest&);
+
 };
 
 typedef function<void(const Data& signedData)> SignatureFinishCallback;

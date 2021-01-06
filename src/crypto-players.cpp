@@ -117,7 +117,27 @@ MpsVerifier::addCert(const Name& keyName, blsPublicKey pk)
 void
 MpsVerifier::addSignerList(const Name& listName, MpsSignerList list)
 {
-    m_signList.emplace(listName, list);
+    m_signLists.emplace(listName, list);
+}
+
+std::map<Name, blsPublicKey>&
+MpsVerifier::getCerts() {
+    return m_certs;
+}
+
+std::map<Name, MpsSignerList>&
+MpsVerifier::getSignerLists() {
+    return m_signLists;
+}
+
+const std::map<Name, blsPublicKey>&
+MpsVerifier::getCerts() const {
+    return m_certs;
+}
+
+const std::map<Name, MpsSignerList>&
+MpsVerifier::getSignerLists() const {
+    return m_signLists;
 }
 
 bool
@@ -126,8 +146,8 @@ MpsVerifier::readyToVerify(const Data& data) const
     const auto& sigInfo = data.getSignatureInfo();
     if (sigInfo.hasKeyLocator() && sigInfo.getKeyLocator().getType() == tlv::Name) {
         if (m_certs.count(sigInfo.getKeyLocator().getName()) == 1) return true;
-        if (m_signList.count(sigInfo.getKeyLocator().getName()) == 0) return false;
-        const auto& item = m_signList.at(sigInfo.getKeyLocator().getName());
+        if (m_signLists.count(sigInfo.getKeyLocator().getName()) == 0) return false;
+        const auto& item = m_signLists.at(sigInfo.getKeyLocator().getName());
         for (const auto& signers : item.getSigners()) {
             if (m_certs.count(signers) == 0) return false;
         }
@@ -144,11 +164,11 @@ MpsVerifier::itemsToFetch(const Data& data) const
     const auto& sigInfo = data.getSignatureInfo();
     if (sigInfo.hasKeyLocator() && sigInfo.getKeyLocator().getType() == tlv::Name) {
         if (m_certs.count(sigInfo.getKeyLocator().getName()) == 1) return ans;
-        if (m_signList.count(sigInfo.getKeyLocator().getName()) == 0) {
+        if (m_signLists.count(sigInfo.getKeyLocator().getName()) == 0) {
             ans.emplace_back(sigInfo.getKeyLocator().getName());
             return ans;
         }
-        const auto& item = m_signList.at(sigInfo.getKeyLocator().getName());
+        const auto& item = m_signLists.at(sigInfo.getKeyLocator().getName());
         for (const auto& signers : item.getSigners()) {
             if (m_certs.count(signers) == 0) {
                 ans.emplace_back(sigInfo.getKeyLocator().getName());
@@ -166,8 +186,8 @@ MpsVerifier::verifySignature(const Data& data, const MultipartySchema& schema) c
     bool aggKeyInitialized = false;
     blsPublicKey aggKey;
     if (sigInfo.getKeyLocator().getType() == tlv::Name) {
-        if (m_signList.count(sigInfo.getKeyLocator().getName()) != 0) {
-            locator = m_signList.at(sigInfo.getKeyLocator().getName());
+        if (m_signLists.count(sigInfo.getKeyLocator().getName()) != 0) {
+            locator = m_signLists.at(sigInfo.getKeyLocator().getName());
             if (m_aggregateKey.count(sigInfo.getKeyLocator().getName()) != 0) {
                 aggKey = m_aggregateKey.at(sigInfo.getKeyLocator().getName());
                 aggKeyInitialized = true;
@@ -227,6 +247,7 @@ MpsVerifier::verifySignaturePiece(Data data, const SignatureInfo& sigInfo, const
 
     data.setSignatureInfo(sigInfo);
 
+    if (m_certs.count(signedBy) == 0) return false;
     blsPublicKey publicKey = m_certs.at(signedBy);
     blsSignature sig;
     if (blsSignatureDeserialize(&sig, signaturePiece.value(), signaturePiece.value_size()) == 0) return false;
