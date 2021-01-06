@@ -88,7 +88,7 @@ MpsSignerList::setSigners(const std::vector<Name>& locators)
 }
 
 std::vector<Name>&
-MpsSignerList::getMutableSigners(){
+MpsSignerList::getSigners(){
     m_wire.reset();
     return m_locators;
 }

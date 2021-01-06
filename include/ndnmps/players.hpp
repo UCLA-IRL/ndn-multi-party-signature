@@ -1,7 +1,9 @@
+#ifndef NDNMPS_PLAYERS_HPP
+#define NDNMPS_PLAYERS_HPP
+
 #include "ndnmps/schema.hpp"
 #include "mps-signer-list.hpp"
-#include <mcl/bn_c384_256.h>
-#include <bls/bls.hpp>
+#include "crypto-players.hpp"
 #include <ndn-cxx/data.hpp>
 
 #include <iostream>
@@ -9,69 +11,36 @@
 
 namespace ndn {
 
+// TODO players that handles all protocols and network interactions
 class Signer {
 private:
-  blsSecretKey m_sk;
-  blsPublicKey m_pk;
+  MpsSigner m_mpsSigner;
 
 public:
   /**
    * @brief Generate public and secret key pair.
    */
-  Signer();
+  Signer(MpsSigner mpsSigner);
 
-  /**
-   * @brief Initialize public and secret key pair from secret key serialization.
-   */
-  Signer(Buffer secretKeyBuf);
+  const MpsSigner&
+  getMpsSigner() const;
 
-  /**
-   * @brief Get public key.
-   */
-  blsPublicKey
-  getPublicKey();
-
-  /**
-   * @brief Generate public key for network transmission.
-   */
-  std::vector<uint8_t>
-  getpublicKeyStr();
-
-  /**
-   * Return the signature value for the packet.
-   * @param data the unsigned data packet
-   * @param sigInfo the signature info to be used
-   * @return the signature value signed by this signer
-   */
-  Block
-  getSignature(Data data, const SignatureInfo& sigInfo);
-
-  /**
-   * sign the packet for the packet (as the only signer).
-   * @param data the unsigned data packet
-   * @param sigInfo the signature info to be used
-   * @return the signature value signed by this signer
-   */
-  void
-  sign(Data& data, const Name& keyName);
+  MpsSigner&
+  getMpsSigner();
 };
 
 class Verifier {
 private:
-  std::map<Name, blsPublicKey> m_certs;
+  MpsVerifier m_verifier;
 
 public:
+  Verifier(MpsVerifier verifier);
 
-  Verifier();
+  const MpsVerifier&
+  getMpsVerifier() const;
 
-  void
-  addCert(const Name& keyName, blsPublicKey pk);
-
-  bool
-  verifySignature(const Data& data, const MultipartySchema& schema);
-
-  bool
-  verifySignaturePiece(Data data, const SignatureInfo& info, const Name& signedBy, const Block& signaturePiece);
+    MpsVerifier&
+  getMpsVerifier();
 };
 
 typedef function<void(const Data& signedData)> SignatureFinishCallback;
@@ -81,13 +50,6 @@ class Initiator {
 public:
 
   Initiator();
-
-  static void
-  buildMultiSignature(Data& data, const SignatureInfo& sigInfo,
-          const std::vector<blsSignature>& collectedPiece);
-
-  static optional<SignatureInfo>
-  getMinMPSignatureInfo(const MultipartySchema& schema, const std::vector<Name>& availableSingerKeys);
 
   void
   startSigningProcess(const MultipartySchema& schema, const Data& unfinishedData,
@@ -105,3 +67,5 @@ private:
 };
 
 }  // namespace ndn
+
+#endif // NDNMPS_PLAYERS_HPP

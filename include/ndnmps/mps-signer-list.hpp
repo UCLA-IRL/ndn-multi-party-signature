@@ -56,11 +56,11 @@ public: // encode and decode
     const std::vector<Name>&
     getSigners() const;
 
+    std::vector<Name>&
+    getSigners();
+
     void
     setSigners(const std::vector<Name>& locators);
-
-    std::vector<Name>&
-    getMutableSigners();
 
 private:
     std::vector<Name> m_locators;

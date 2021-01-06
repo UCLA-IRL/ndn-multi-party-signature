@@ -1,3 +1,6 @@
+#ifndef NDNMPS_SCHEMA_HPP
+#define NDNMPS_SCHEMA_HPP
+
 #include <nlohmann/json.hpp>
 #include <set>
 #include <list>
@@ -37,6 +40,9 @@ public:
   static MultipartySchema
   fromString(const std::string& configStr);
 
+  static MultipartySchema
+  fromTlv(const Block& configBlock);
+
   std::string
   toString();
 
@@ -58,3 +64,5 @@ private:
 };
 
 } // namespace ndn
+
+#endif // NDNMPS_SCHEMA_HPP
