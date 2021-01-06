@@ -58,7 +58,7 @@ Signer::getpublicKeyStr()
 Block
 Signer::getSignature(Data data, const SignatureInfo& sigInfo)
 {
-    if (sigInfo.getSignatureType() != tlv::MpsSignatureSha256WithBls) {
+    if (sigInfo.getSignatureType() != tlv::SignatureSha256WithBls) {
         NDN_THROW(std::runtime_error("Signer got non-BLS signature type"));
     }
 
@@ -81,7 +81,7 @@ Signer::getSignature(Data data, const SignatureInfo& sigInfo)
 void
 Signer::sign(Data& data, const Name& keyName)
 {
-    SignatureInfo info(static_cast<tlv::SignatureTypeValue>(tlv::MpsSignatureSha256WithBls), KeyLocator(keyName));
+    SignatureInfo info(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls), KeyLocator(keyName));
     auto signature = getSignature(data, info);
 
     data.setSignatureInfo(info);
@@ -103,20 +103,20 @@ bool
 Verifier::verifySignature(const Data& data, const MultipartySchema& schema)
 {
     auto sigInfo = data.getSignatureInfo();
-    auto locatorBlock = sigInfo.getCustomTlv(tlv::MultiPartyKeyLocator);
-    MultiPartyKeyLocator locator;
+    auto locatorBlock = sigInfo.getCustomTlv(tlv::MpsSignerList);
+    MpsSignerList locator;
     if (locatorBlock) {
         locator.wireDecode(*locatorBlock);
     } else {
         if (sigInfo.getKeyLocator().getType() == tlv::Name)
-            locator.getMutableLocators().emplace_back(sigInfo.getKeyLocator().getName());
+            locator.getMutableSigners().emplace_back(sigInfo.getKeyLocator().getName());
     }
-    if (!MultipartySchema::verifyKeyLocator(locator, schema)) return false;
+    if (!schema.verifyKeyLocator(locator)) return false;
 
     //check signature
     std::vector<blsPublicKey> keys;
-    for (const auto& signer: locator.getLocators()) {
-        auto it = m_certs.find(signer.getName());
+    for (const auto& signer: locator.getSigners()) {
+        auto it = m_certs.find(signer);
         if (it == m_certs.end()) return false;
         keys.emplace_back(it->second);
     }
@@ -141,7 +141,7 @@ Verifier::verifySignature(const Data& data, const MultipartySchema& schema)
 
 bool
 Verifier::verifySignaturePiece(Data data, const SignatureInfo& sigInfo, const Name& signedBy, const Block& signaturePiece) {
-    if (sigInfo.getSignatureType() != tlv::MpsSignatureSha256WithBls) {
+    if (sigInfo.getSignatureType() != tlv::SignatureSha256WithBls) {
         NDN_THROW(std::runtime_error("Signer got non-BLS signature type"));
     }
 
@@ -195,7 +195,7 @@ Initiator::buildMultiSignature(Data& data, const SignatureInfo& sigInfo, const s
 optional<SignatureInfo>
 Initiator::getMinMPSignatureInfo(const MultipartySchema& schema, const std::vector<Name>& availableSingerKeys)
 {
-    auto result = MultipartySchema::getMinPossibleSignerInfo(schema, availableSingerKeys);
+    auto result = schema.getMinSigners(availableSingerKeys);
     if (!result) return nullopt;
     else return MultiPartySignature::getMultiPartySignatureInfo(*result);
 }

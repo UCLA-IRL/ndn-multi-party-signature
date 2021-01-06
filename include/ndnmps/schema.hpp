@@ -2,7 +2,7 @@
 #include <set>
 #include <list>
 #include <ndn-cxx/name.hpp>
-#include "multi-party-key-locator.hpp"
+#include "mps-signer-list.hpp"
 
 using Json = nlohmann::json;
 
@@ -41,11 +41,10 @@ public:
   toString();
 
   optional<std::vector<Name>>
-  getMinSigners(const std::vector<Name>& availableKeys);
+  getMinSigners(const std::vector<Name>& availableKeys) const;
 
-public:
-    static bool
-    verifyKeyLocator(const MultiPartyKeyLocator& locator, const MultipartySchema& schema);
+  bool
+  verifyKeyLocator(const MpsSignerList& locator) const;
 private:
   static void
   parseAssert(bool criterion);

@@ -7,16 +7,16 @@ namespace tlv {
 std::ostream&
 operator<<(std::ostream& os, MpsSignatureTypeValue st)
 {
-    switch (st) {
-        case MpsDigestSha256:
+    switch (static_cast<uint16_t>(st)) {
+        case DigestSha256:
             return os << "DigestSha256";
-        case MpsSignatureSha256WithRsa:
+        case SignatureSha256WithRsa:
             return os << "SignatureSha256WithRsa";
-        case MpsSignatureSha256WithEcdsa:
+        case SignatureSha256WithEcdsa:
             return os << "SignatureSha256WithEcdsa";
-        case MpsSignatureHmacWithSha256:
+        case SignatureHmacWithSha256:
             return os << "SignatureHmacWithSha256";
-        case MpsSignatureSha256WithBls:
+        case SignatureSha256WithBls:
             return os << "SignatureSha256WithBls";
     }
     return os << "Unknown(" << static_cast<uint32_t>(st) << ')';

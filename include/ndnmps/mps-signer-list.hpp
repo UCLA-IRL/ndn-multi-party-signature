@@ -2,8 +2,8 @@
 // Created by Tyler on 12/29/20.
 //
 
-#ifndef NDNMPS_MULTI_PARTY_KEY_LOCATOR_HPP
-#define NDNMPS_MULTI_PARTY_KEY_LOCATOR_HPP
+#ifndef NDNMPS_MPS_SIGNER_LIST_HPP
+#define NDNMPS_MPS_SIGNER_LIST_HPP
 
 #include "ndnmps/common.hpp"
 #include <vector>
@@ -11,7 +11,7 @@
 
 namespace ndn {
 
-class MultiPartyKeyLocator
+class MpsSignerList
 {
 public:
     class Error : public tlv::Error
@@ -20,21 +20,21 @@ public:
         using tlv::Error::Error;
     };
 public: // constructors
-    /** \brief Construct an empty KeyLocator.
+    /** \brief Construct an empty list.
      *  \post `empty() == true`
      */
-    MultiPartyKeyLocator();
+    MpsSignerList();
 
     /** \brief Construct from vector of names.
      *  \note Implicit conversion is permitted.
      *  \post `getType() == tlv::Name`
      */
-    MultiPartyKeyLocator(const std::vector<KeyLocator>& signers);
+    MpsSignerList(std::vector<Name>  signers);
 
     /** \brief Construct from wire encoding.
      */
     explicit
-    MultiPartyKeyLocator(const Block& wire);
+    MpsSignerList(const Block& wire);
 
 public: // encode and decode
     /** \brief Prepend wire encoding to \p encoder.
@@ -53,20 +53,20 @@ public: // encode and decode
     void
     wireDecode(const Block& wire);
 
-    const std::vector<KeyLocator>&
-    getLocators() const;
+    const std::vector<Name>&
+    getSigners() const;
 
     void
-    setLocators(const std::vector<KeyLocator>& locators);
+    setSigners(const std::vector<Name>& locators);
 
-    std::vector<KeyLocator>&
-    getMutableLocators();
+    std::vector<Name>&
+    getMutableSigners();
 
 private:
-    std::vector<KeyLocator> m_locators;
+    std::vector<Name> m_locators;
     mutable Block m_wire;
 };
 
 } // namespace ndn
 
-#endif //NDNMPS_MULTI_PARTY_KEY_LOCATOR_HPP
+#endif //NDNMPS_MPS_SIGNER_LIST_HPP

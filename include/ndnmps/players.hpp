@@ -1,5 +1,5 @@
 #include "ndnmps/schema.hpp"
-#include "multi-party-key-locator.hpp"
+#include "mps-signer-list.hpp"
 #include <mcl/bn_c384_256.h>
 #include <bls/bls.hpp>
 #include <ndn-cxx/data.hpp>
