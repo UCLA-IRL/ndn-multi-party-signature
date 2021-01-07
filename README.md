@@ -9,9 +9,11 @@ Goals:
 
 ## Progress Track
 
-
-
-
+* [ ] The crypto operations of players
+* [ ] Encoding/decoding of BLS signature info and signature value
+* [ ] Schema file parsing
+* [ ] Negotiation protocol
+* [ ] Verification
 
 ## Contact
 
