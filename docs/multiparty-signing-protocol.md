@@ -1,6 +1,6 @@
 # NDN Based Multiparty Signing Protocol
 
-**Author**: Zhiyi Zhang
+**Author**: Zhiyi Zhang, Siqi Liu
 
 **Versions**: v2 (Dec 23, 2020) obsolete v1 (Dec 15, 2020)
 
@@ -82,7 +82,7 @@ Specifically, for each `I` and `S`, the protocol sets:
     * Name: `/S/mps/sign/[hash]`
     * Content:
 
-      * `Status`, Status code: 200 OK, 500 Internal Error, 503 Unavailable
+      * `Status`, Status code: 102 Processing, 500 Internal Error, 503 Unavailable
       * `Result_after`, Estimated time of finishing the signing process.
       * `Result_name`, the future result Data packet name `D_Signed_S.Name` (does not contain version, timestamp, or implicit digest).
 
@@ -90,9 +90,12 @@ Specifically, for each `I` and `S`, the protocol sets:
 
 * `S` fetches the wrapper Data using the name in `SignRequest.Unsigned_Wrapper_Name`, verifies its digest against the implicit digest name component. If succeeds and `S` agrees to sign it, `S` uses its private key to sign the packet `D_Signed_S` and put the signature value into the result packet. Then, `S` publishes the result packet.
 
-  * Data Name: `/S/mps/result-of/[hash]`
+  * Data Name: `/S/mps/result-of/[result-id]` ( = `D_Signed_S.Name`)
   * Data content:
 
+    * `Status`, Status code: 102 Processing, 200 OK, 
+                404 Not Found, 401 Unauthorized, 424 Failed Dependency, 
+                500 Internal Error, 503 Unavailable, 
     * Signature Value of `D_Signed_S`. Note the keylocator must be `SignRequest.KeyLocator_Name`
 
   * Signature info: SHA256 signature

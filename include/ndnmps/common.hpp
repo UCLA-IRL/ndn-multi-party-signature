@@ -9,6 +9,11 @@ namespace tlv {
 
 enum : uint32_t {
     MpsSignerList = 201,
+    Status = 203,
+    UnsignedWrapperName = 205,
+    SignerListName = 207,
+    ResultAfter = 209,
+    ResultName = 211,
 };
 
 /** @brief Extended SignatureType values with Multi-Party Signature
@@ -21,6 +26,17 @@ enum MpsSignatureTypeValue : uint16_t {
 std::ostream&
 operator<<(std::ostream& os, MpsSignatureTypeValue st);
 }
+
+enum class ReplyCode : int {
+    Processing = 102,
+    OK = 200,
+    BadRequest = 400,
+    Unauthorized = 401,
+    NotFound = 404,
+    FailedDependency = 424,
+    InternalError = 500,
+    Unavailable = 503,
+};
 
 /**
  * @brief The extended type of a cryptographic key with Multi-Party Signature.

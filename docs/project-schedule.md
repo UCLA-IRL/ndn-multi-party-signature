@@ -32,7 +32,7 @@
 
 * **Deliverable**
 
-  C++ BLS signature library for NDN: `ndn-bls`
+  C++ BLS signature library for NDN: `ndnmps`
 
   * Dependencies: ndn-cxx (ndn-ind), [BLS library](https://github.com/herumi/bls)
   * Platform: cross-platform
