@@ -8,7 +8,7 @@ namespace ndn {
 namespace tlv {
 
 enum : uint32_t {
-    MpsSignerList = 201,
+    MpsSignerList = 200,
     Status = 203,
     UnsignedWrapperName = 205,
     SignerListName = 207,
