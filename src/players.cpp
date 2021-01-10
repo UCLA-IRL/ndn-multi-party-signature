@@ -245,14 +245,14 @@ Verifier::setCertVerifyCallback(const function<bool(const Data&)>& func) {
 }
 
 void
-Verifier::asyncVerifySignature(const Data& data, const MultipartySchema& schema, const VerifyFinishCallback& callback)
+Verifier::asyncVerifySignature(shared_ptr<const Data> data, shared_ptr<const MultipartySchema> schema, const VerifyFinishCallback& callback)
 {
-    if (readyToVerify(data)) {
-        callback(verifySignature(data, schema));
+    if (readyToVerify(*data)) {
+        callback(verifySignature(*data, *schema));
     } else {
         //store, fetch and wait
-        QueueRecord r{data, schema, callback, 0};
-        for (const auto& item : itemsToFetch(data)) {
+        VerificationRecord r{data, schema, callback, 0};
+        for (const auto& item : itemsToFetch(*data)) {
             Interest interest(item);
             interest.setCanBePrefix(false);
             interest.setMustBeFresh(true);
@@ -319,7 +319,7 @@ void Verifier::satisfyItem(const Name &itemName) {
     for (auto i : m_index.at(itemName)) {
         if (m_queue.count(i) != 0) {
             if (m_queue.at(i).itemLeft == 1) {
-                QueueRecord r = m_queue.at(i);
+                VerificationRecord r = m_queue.at(i);
                 m_queue.erase(i);
                 asyncVerifySignature(r.data, r.schema, r.callback);
             } else {

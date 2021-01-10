@@ -76,13 +76,13 @@ typedef function<void(bool)> VerifyFinishCallback;
 
 class Verifier: public MpsVerifier {
 private:
-    struct QueueRecord {
-        const Data& data;
-        const MultipartySchema& schema;
-        const VerifyFinishCallback& callback;
+    struct VerificationRecord {
+        shared_ptr<const Data> data;
+        shared_ptr<const MultipartySchema> schema;
+        const VerifyFinishCallback callback;
         int itemLeft;
     };
-    std::map<int, QueueRecord> m_queue;
+    std::map<int, VerificationRecord> m_queue;
     int m_queueLast = 0;
     std::map<Name, std::set<int>> m_index;
     Face& m_face;
@@ -94,7 +94,7 @@ public:
     setCertVerifyCallback(const function<bool(const Data&)>& func);
 
     void
-    asyncVerifySignature(const Data& data, const MultipartySchema& schema, const VerifyFinishCallback& callback);
+    asyncVerifySignature(shared_ptr<const Data> data, shared_ptr<const MultipartySchema> schema, const VerifyFinishCallback& callback);
 
 private:
     void
