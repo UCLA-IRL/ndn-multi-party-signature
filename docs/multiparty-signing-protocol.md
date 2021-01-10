@@ -72,7 +72,6 @@ Specifically, for each `I` and `S`, the protocol sets:
   * Application parameter:
 
     * `Unsigned_Wrapper_Name` + implicit digest, The name of a wrapper packet whose content is `D_Unsigned`. When the data object to be signed contains more than one packets, e.g., a large file, a manifest Data packet should be put here.
-    * `KeyLocator_Name`, The key locator used in `S`'s signing process, which is the name of the signing info Data packet `D_info`, e.g., `/I/mps/schema/example/data/[version]`.
     * Optional `ForwardingHint`, the forwarding hint of the initiator.
 
   * Signature: Signed by `I`'s key
@@ -90,13 +89,14 @@ Specifically, for each `I` and `S`, the protocol sets:
 
 * `S` fetches the wrapper Data using the name in `SignRequest.Unsigned_Wrapper_Name`, verifies its digest against the implicit digest name component. If succeeds and `S` agrees to sign it, `S` uses its private key to sign the packet `D_Signed_S` and put the signature value into the result packet. Then, `S` publishes the result packet.
 
-  * Data Name: `/S/mps/result-of/[result-id]` ( = `D_Signed_S.Name`)
+  * Data Name: `/S/mps/result-of/[SignRequest.digest]/[version-num]`
   * Data content:
 
-    * `Status`, Status code: 102 Processing, 200 OK, 
-                404 Not Found, 401 Unauthorized, 424 Failed Dependency, 
-                500 Internal Error, 503 Unavailable, 
-    * Signature Value of `D_Signed_S`. Note the keylocator must be `SignRequest.KeyLocator_Name`
+    * `Status`, Status code: 102 Processing, 200 OK,
+                404 Not Found, 401 Unauthorized, 424 Failed Dependency,
+                500 Internal Error, 503 Unavailable,
+    * (Only when 200 OK) Signature Value of `D_Signed_S`.
+      Note the keylocator must be `SignRequest.KeyLocator_Name`
 
   * Signature info: SHA256 signature
   * Signature Value: SHA256
