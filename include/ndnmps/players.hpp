@@ -126,7 +126,6 @@ private:
         Data wrapper;
         std::map<Name, blsSignature> signaturePieces;
         scheduler::EventId eventId;
-        SignatureInfo sigInfo;
         InitiationRecord(const MultipartySchema& trySchema, std::shared_ptr<Data> data,
                          const SignatureFinishCallback& successCb, const SignatureFailureCallback& failureCb);
     };

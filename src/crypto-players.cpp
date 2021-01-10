@@ -79,11 +79,33 @@ MpsSigner::getSignature(Data data, const SignatureInfo& sigInfo) const
 
     data.setSignatureInfo(sigInfo);
 
+    return getSignature(data);
+}
+
+Block
+MpsSigner::getSignature(const Data& data) const
+{
+    if (!data.getSignatureInfo()) {
+        return Block();
+    }
+    const uint8_t *data_ptr;
+    size_t data_size;
     EncodingBuffer encoder;
-    data.wireEncode(encoder, true);
+    auto signedRanges = data.extractSignedRanges();
+    if (signedRanges.size() == 1) { // to avoid copying in current ndn-cxx impl
+        const auto& it = signedRanges.begin();
+        data_ptr = it->first;
+        data_size = it->second;
+    } else {
+        for (const auto &it : signedRanges) {
+            encoder.appendByteArray(it.first, it.second);
+        }
+        data_ptr = encoder.buf();
+        data_size = encoder.size();
+    }
 
     blsSignature sig;
-    blsSign(&sig, &m_sk, encoder.buf(), encoder.size());
+    blsSign(&sig, &m_sk, data_ptr, data_size);
     auto signatureBuf = make_shared<Buffer>(blsGetSerializedSignatureByteSize());
     auto written_size = blsSignatureSerialize(signatureBuf->data(), signatureBuf->size(), &sig);
     if (written_size == 0) {
@@ -247,12 +269,23 @@ MpsVerifier::verifySignaturePiece(Data data, const SignatureInfo& sigInfo, const
 
     data.setSignatureInfo(sigInfo);
 
+    return verifySignaturePiece(data, signedBy, signaturePiece);
+}
+
+bool
+MpsVerifier::verifySignaturePiece(const Data& dataWithInfo, const Name& signedBy, const Block& signaturePiece) const
+{
+    const auto& sigInfo = dataWithInfo.getSignatureInfo();
+    if (!sigInfo || sigInfo.getSignatureType() != tlv::SignatureSha256WithBls) {
+        NDN_THROW(std::runtime_error("Signer got non-BLS signature type"));
+    }
+
     if (m_certs.count(signedBy) == 0) return false;
     blsPublicKey publicKey = m_certs.at(signedBy);
     blsSignature sig;
     if (blsSignatureDeserialize(&sig, signaturePiece.value(), signaturePiece.value_size()) == 0) return false;
 
-    auto signedRanges = data.extractSignedRanges();
+    auto signedRanges = dataWithInfo.extractSignedRanges();
     if (signedRanges.size() == 1) { // to avoid copying in current ndn-cxx impl
         const auto& it = signedRanges.begin();
         return blsVerify(&sig, &publicKey, it->first, it->second);
@@ -274,11 +307,18 @@ void
 MpsAggregater::buildMultiSignature(Data& data, const SignatureInfo& sigInfo,
         const std::vector<blsSignature>& collectedPiece) const
 {
-
     data.setSignatureInfo(sigInfo);
+    buildMultiSignature(data, collectedPiece);
+}
 
+void
+MpsAggregater::buildMultiSignature(Data& dataWithInfo, const std::vector<blsSignature>& collectedPiece) const
+{
+    if (!dataWithInfo.getSignatureInfo()) {
+        NDN_THROW(std::runtime_error("No signature info for the data"));
+    }
     EncodingBuffer encoder;
-    data.wireEncode(encoder, true);
+    dataWithInfo.wireEncode(encoder, true);
 
     blsSignature outputSig;
     blsAggregateSignature(&outputSig, collectedPiece.data(), collectedPiece.size());
@@ -291,7 +331,7 @@ MpsAggregater::buildMultiSignature(Data& data, const SignatureInfo& sigInfo,
 
     Block sigValue(tlv::SignatureValue,sigBuffer);
 
-    data.wireEncode(encoder, sigValue);
+    dataWithInfo.wireEncode(encoder, sigValue);
 }
 
 } // namespace ndn

@@ -175,6 +175,10 @@ Signer::onData(const Interest& interest, const Data& data)
     if (code == ReplyCode::OK) {
         try {
             unsignedData = Data(data.getContent().blockFromValue());
+            if (!unsignedData.getSignatureInfo()) {
+                NDN_LOG_ERROR("Unsigned Data does not have encoding");
+                code = ReplyCode::BadRequest;
+            }
         } catch (const std::exception &e) {
             NDN_LOG_ERROR("Unsigned Data encoding fail");
             code = ReplyCode::BadRequest;
@@ -202,8 +206,7 @@ Signer::onData(const Interest& interest, const Data& data)
         return;
     }
     //sign
-    state.value = getSignature(unsignedData,
-            SignatureInfo(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls), KeyLocator(state.signerListName)));
+    state.value = getSignature(unsignedData);
 }
 
 void
@@ -353,7 +356,7 @@ Initiator::Initiator(MpsVerifier& verifier, const Name& prefix, Face& face, Sche
 
 Initiator::InitiationRecord::InitiationRecord(const MultipartySchema& trySchema, std::shared_ptr<Data> data,
                  const SignatureFinishCallback& successCb, const SignatureFailureCallback& failureCb)
-                 : schema(trySchema), unsignedData(data), onSuccess(successCb), onFailure(failureCb) {}
+                 : schema(trySchema), unsignedData(std::move(data)), onSuccess(successCb), onFailure(failureCb) {}
 
 Initiator::~Initiator()
 {
@@ -371,7 +374,7 @@ Initiator::addSigner(const Name& keyName,const Name& prefix) {
 void
 Initiator::setInterestSignCallback(std::function<void(Interest&)> func)
 {
-    m_interestSigningCallback = func;
+    m_interestSigningCallback = std::move(func);
 }
 
 void
@@ -406,15 +409,20 @@ Initiator::multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> 
     auto& currentRecord = m_records.at(m_lastId);
     int currentId = m_lastId;
     m_lastId ++;
-    //wrapper
+
+    //build signature info packet
     std::array<uint8_t, 8> wrapperBuf = {};
     random::generateSecureBytes(wrapperBuf.data(), 8);
+    currentRecord.unsignedData->setSignatureInfo(
+            SignatureInfo(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
+            KeyLocator(Name(m_prefix).append("mps").append("signers")
+            .append(toHex(wrapperBuf.data(), 8)))));
+
+    //wrapper
     currentRecord.wrapper.setName(Name(m_prefix).append("mps").append("wrapper").append(toHex(wrapperBuf.data(), 8)));
     currentRecord.wrapper.setContent(makeNestedBlock(tlv::Content, *currentRecord.unsignedData));
     auto wrapperFullName = currentRecord.wrapper.getFullName();
     m_wrapToId.emplace(wrapperFullName, currentId);
-    currentRecord.sigInfo = SignatureInfo(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
-                                          KeyLocator(Name(m_prefix).append("mps").append("signers").append(toHex(wrapperBuf.data(), 8))));
 
     //send interest
     if (!m_interestSigningCallback) {
@@ -427,8 +435,6 @@ Initiator::multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> 
         interest.setName(Name(m_keyToPrefix.at(i)).append("mps").append("sign"));
         Block appParam(tlv::ApplicationParameters);
         appParam.push_back(makeNestedBlock(tlv::UnsignedWrapperName, wrapperFullName));
-        appParam.push_back(makeNestedBlock(tlv::SignerListName,
-                                           Name(m_prefix).append("mps").append("signers").append(toHex(wrapperBuf.data(), 8))));
         interest.setApplicationParameters(appParam);
         m_interestSigningCallback(interest);
         interest.setCanBePrefix(false);
@@ -521,7 +527,7 @@ Initiator::onData(int id, const Name& keyName, const Interest&, const Data& data
         }
 
         auto& record = m_records.at(id);
-        m_verifier.verifySignaturePiece(*record.unsignedData, record.sigInfo, keyName, b);
+        m_verifier.verifySignaturePiece(*record.unsignedData, keyName, b);
         record.signaturePieces.emplace(keyName, sig);
         if (record.signaturePieces.size() >= record.schema.signers.size() + record.schema.minOptionalSigners) {
             std::vector<Name> successPiece(record.signaturePieces.size());
@@ -593,14 +599,11 @@ Initiator::successCleanup(int id)
 
     MpsSignerList signerList(successPiece);
     Data signerListData;
-    signerListData.setName(record.sigInfo.getKeyLocator().getName());
+    signerListData.setName(record.unsignedData->getSignatureInfo().getKeyLocator().getName());
     signerListData.setContent(makeNestedBlock(tlv::Content, signerList));
     //TODO sign?
 
-    buildMultiSignature(*record.unsignedData,
-                        record.sigInfo,
-                        pieces
-                        );
+    buildMultiSignature(*record.unsignedData, pieces);
 
     if (record.onSuccess) {
         record.onSuccess(record.unsignedData, std::move(signerListData));

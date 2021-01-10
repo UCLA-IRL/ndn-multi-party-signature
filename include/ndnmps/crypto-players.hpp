@@ -63,6 +63,14 @@ public:
   Block
   getSignature(Data data, const SignatureInfo& sigInfo) const;
 
+    /**
+     * Return the signature value for the packet with signature info already in the data
+     * @param data the unsigned data packet with info
+     * @return the signature value signed by this signer
+     */
+  Block
+  getSignature(const Data& dataWithInfo) const;
+
   /**
    * sign the packet for the packet (as the only signer).
    * @param data the unsigned data packet
@@ -112,6 +120,16 @@ public:
 
   bool
   verifySignaturePiece(Data data, const SignatureInfo& info, const Name& signedBy, const Block& signaturePiece) const;
+
+  /**
+   * Verify the sigature piece with the signature info already in the given data.
+   * @param dataWithInfo
+   * @param signedBy
+   * @param signaturePiece
+   * @return true if verified; else false
+   */
+  bool
+  verifySignaturePiece(const Data& dataWithInfo, const Name& signedBy, const Block& signaturePiece) const;
 };
 
 class MpsAggregater {
@@ -122,6 +140,8 @@ public:
     buildMultiSignature(Data& data, const SignatureInfo& sigInfo,
                         const std::vector<blsSignature>& collectedPiece) const;
 
+    void
+    buildMultiSignature(Data& dataWithInfo, const std::vector<blsSignature>& collectedPiece) const;
 };
 
 }  // namespace ndn
