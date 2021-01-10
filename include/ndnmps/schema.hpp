@@ -46,6 +46,9 @@ public:
   std::string
   toString();
 
+  std::vector<Name>
+  getKeyMatches(const Name& key) const;
+
   optional<std::vector<Name>>
   getMinSigners(const std::vector<Name>& availableKeys) const;
 

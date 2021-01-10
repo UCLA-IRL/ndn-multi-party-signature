@@ -6,6 +6,7 @@
 #include "crypto-players.hpp"
 #include <ndn-cxx/data.hpp>
 #include <ndn-cxx/face.hpp>
+#include <ndn-cxx/util/scheduler.hpp>
 
 #include <iostream>
 #include <map>
@@ -112,27 +113,73 @@ private:
     onTimeout(const Interest&);
 };
 
-typedef function<void(const Data& signedData)> SignatureFinishCallback;
-typedef function<void(const Data& unfinishedData, const std::string& reason)> SignatureFailureCallback;
+typedef function<void(std::shared_ptr<Data> data, Data signerListData)> SignatureFinishCallback;
+typedef function<void(const std::string& reason)> SignatureFailureCallback;
 
-class Initiator {
+class Initiator : public MpsAggregater{
+private:
+    struct InitiationRecord{
+        const MultipartySchema& schema;
+        std::shared_ptr<Data> unsignedData;
+        const SignatureFinishCallback& onSuccess;
+        const SignatureFailureCallback& onFailure;
+        Data wrapper;
+        std::map<Name, blsSignature> signaturePieces;
+        scheduler::EventId eventId;
+        SignatureInfo sigInfo;
+        InitiationRecord(const MultipartySchema& trySchema, std::shared_ptr<Data> data,
+                         const SignatureFinishCallback& successCb, const SignatureFailureCallback& failureCb);
+    };
+  MpsVerifier& m_verifier;
+  Face& m_face;
+  Scheduler& m_scheduler;
+  std::map<Name, Name> m_keyToPrefix;
+  const Name m_prefix;
+  optional<RegisteredPrefixHandle> m_handle;
+  std::map<int, InitiationRecord> m_records;
+  std::map<Name, int> m_wrapToId;
+  int m_lastId;
+  std::function<void(Interest&)> m_interestSigningCallback;
 public:
 
-  Initiator();
+  Initiator(MpsVerifier& verifier, const Name& prefix, Face& face, Scheduler& scheduler);
+  virtual ~Initiator();
 
   void
-  startSigningProcess(const MultipartySchema& schema, const Data& unfinishedData,
-                      const SignatureFinishCallback& successCb, const SignatureFailureCallback& failureCab);
+  addSigner(const Name& keyName,const Name& prefix);
+
+  void
+  addSigner(const Name& keyName, const blsPublicKey& keyValue, const Name& prefix);
+
+  void
+  setInterestSignCallback(std::function<void(Interest&)> func);
+
+  void
+  multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> unfinishedData,
+                 const SignatureFinishCallback& successCb, const SignatureFailureCallback& failureCb);
 
 private:
-  void
-  onTimeout();
 
-  void
-  onNack();
+    void
+    onWrapperFetch(const Interest&);
 
-  void
-  onData();
+    void
+    onData(int id, const Name& keyName, const Interest&, const Data& data);
+
+    void
+    onNack(int id, const Interest&, const lp::Nack& nack);
+
+    void
+    onTimeout(int id, const Interest&);
+
+    static void
+    onRegisterFail(const Name& prefix, const std::string& reason);
+
+    void
+    onSignTimeout(int id);
+
+    void
+    successCleanup(int id);
 };
 
 }  // namespace ndn

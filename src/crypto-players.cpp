@@ -294,12 +294,4 @@ MpsAggregater::buildMultiSignature(Data& data, const SignatureInfo& sigInfo,
     data.wireEncode(encoder, sigValue);
 }
 
-optional<SignatureInfo>
-MpsAggregater::getMinMPSignatureInfo(const MultipartySchema& schema, const std::vector<Name>& availableSingerKeys)
-{
-    auto result = schema.getMinSigners(availableSingerKeys);
-    if (!result) return nullopt;
-    else return MultiPartySignature::getMultiPartySignatureInfo(*result);
-}
-
 } // namespace ndn

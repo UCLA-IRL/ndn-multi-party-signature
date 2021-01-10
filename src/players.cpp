@@ -8,6 +8,9 @@ namespace ndn {
 
 NDN_LOG_INIT(ndnmps.players);
 
+const time::milliseconds INTEREST_TIMEOUT = time::seconds(4);
+const time::milliseconds ESTIMATE_PROCESS_TIME = time::seconds(1);
+
 Signer::Signer(MpsSigner mpsSigner, const Name& prefix, Face& face)
             : MpsSigner(std::move(mpsSigner)), m_prefix(prefix), m_face(face)
 {
@@ -83,6 +86,7 @@ Signer::onInvocation(const Interest& interest) {
     Interest fetchInterest(wrapperName);
     fetchInterest.setCanBePrefix(false);
     fetchInterest.setMustBeFresh(true);
+    fetchInterest.setInterestLifetime(INTEREST_TIMEOUT);
     m_face.expressInterest(fetchInterest,
                            [&](auto && PH1, auto && PH2) { onData(PH1, PH2); },
                            [&](auto && PH1, auto && PH2) { onNack(PH1, PH2); },
@@ -125,7 +129,7 @@ Signer::reply(const Name& interestName, int requestId) const {
     block.push_back(makeStringBlock(tlv::Status,
                                     std::to_string(static_cast<int>(it->second.status))));
     if (it->second.status == ReplyCode::Processing) {
-        block.push_back(makeNonNegativeIntegerBlock(tlv::ResultAfter, 1000));
+        block.push_back(makeNonNegativeIntegerBlock(tlv::ResultAfter, ESTIMATE_PROCESS_TIME.count()));
         Name newResultName = m_prefix;
         newResultName.append("mps").append("result-of").append(std::to_string(requestId) + "_" + std::to_string(it->second.versionCount));
         block.push_back(makeNestedBlock(tlv::ResultName, newResultName));
@@ -252,6 +256,7 @@ Verifier::asyncVerifySignature(const Data& data, const MultipartySchema& schema,
             Interest interest(item);
             interest.setCanBePrefix(false);
             interest.setMustBeFresh(true);
+            interest.setInterestLifetime(INTEREST_TIMEOUT);
             m_face.expressInterest(interest,
                                    [&](auto && PH1, auto && PH2) { onData(PH1, PH2); },
                                    [&](auto && PH1, auto && PH2) { onNack(PH1, PH2); },
@@ -335,6 +340,274 @@ void
 Verifier::onTimeout(const Interest& interest) {
     removeAll(interest.getName());
     NDN_LOG_ERROR("interest time out for " << interest.getName());
+}
+
+Initiator::Initiator(MpsVerifier& verifier, const Name& prefix, Face& face, Scheduler& scheduler)
+        : m_verifier(verifier),
+        m_prefix(prefix),
+        m_face(face), m_scheduler(scheduler), m_lastId(0)
+{
+    m_handle = m_face.setInterestFilter(m_prefix, [&](auto &&, auto && PH2) { onWrapperFetch(PH2); }, nullptr,
+                             Initiator::onRegisterFail);
+}
+
+Initiator::InitiationRecord::InitiationRecord(const MultipartySchema& trySchema, std::shared_ptr<Data> data,
+                 const SignatureFinishCallback& successCb, const SignatureFailureCallback& failureCb)
+                 : schema(trySchema), unsignedData(data), onSuccess(successCb), onFailure(failureCb) {}
+
+Initiator::~Initiator()
+{
+    m_handle->unregister();
+}
+void
+Initiator::addSigner(const Name& keyName,const Name& prefix) {
+    if (!m_verifier.getCerts().count(keyName)) {
+        NDN_LOG_ERROR("do not know private key for" << keyName);
+        NDN_THROW(std::runtime_error("do not know private key for" + keyName.toUri()));
+    }
+    m_keyToPrefix.emplace(keyName, prefix);
+}
+
+void
+Initiator::setInterestSignCallback(std::function<void(Interest&)> func)
+{
+    m_interestSigningCallback = func;
+}
+
+void
+Initiator::addSigner(const Name& keyName, const blsPublicKey& keyValue, const Name& prefix) {
+    if (!m_verifier.getCerts().count(keyName)) {
+        m_verifier.addCert(keyName, keyValue);
+    }
+    m_keyToPrefix.emplace(keyName, prefix);
+}
+
+void
+Initiator::multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> unfinishedData,
+               const SignatureFinishCallback& successCb, const SignatureFailureCallback& failureCb)
+{
+    //verify schema can be done
+    std::vector<Name> keyToCheck;
+    for (const auto& i : m_keyToPrefix) {
+        if (!schema.getKeyMatches(i.first).empty()) {
+            keyToCheck.emplace_back(i.first);
+        }
+    }
+    if (keyToCheck.size() < schema.minOptionalSigners + schema.signers.size() ||
+            !schema.getMinSigners(keyToCheck).has_value()) {
+        NDN_LOG_WARN("Not enough available signers to satisfy schema");
+        if (failureCb) failureCb("Not enough available signers to satisfy schema");
+        return;
+    }
+
+
+    //register
+    m_records.emplace(m_lastId, InitiationRecord(schema, unfinishedData, successCb, failureCb));
+    auto& currentRecord = m_records.at(m_lastId);
+    int currentId = m_lastId;
+    m_lastId ++;
+    //wrapper
+    std::array<uint8_t, 8> wrapperBuf = {};
+    random::generateSecureBytes(wrapperBuf.data(), 8);
+    currentRecord.wrapper.setName(Name(m_prefix).append("mps").append("wrapper").append(toHex(wrapperBuf.data(), 8)));
+    currentRecord.wrapper.setContent(makeNestedBlock(tlv::Content, *currentRecord.unsignedData));
+    auto wrapperFullName = currentRecord.wrapper.getFullName();
+    m_wrapToId.emplace(wrapperFullName, currentId);
+    currentRecord.sigInfo = SignatureInfo(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
+                                          KeyLocator(Name(m_prefix).append("mps").append("signers").append(toHex(wrapperBuf.data(), 8))));
+
+    //send interest
+    if (!m_interestSigningCallback) {
+        NDN_LOG_WARN("No signing callback for initiator");
+        if (failureCb) failureCb("No signing callback for initiator");
+        return;
+    }
+    for (const Name& i : keyToCheck) {
+        Interest interest;
+        interest.setName(Name(m_keyToPrefix.at(i)).append("mps").append("sign"));
+        Block appParam(tlv::ApplicationParameters);
+        appParam.push_back(makeNestedBlock(tlv::UnsignedWrapperName, wrapperFullName));
+        appParam.push_back(makeNestedBlock(tlv::SignerListName,
+                                           Name(m_prefix).append("mps").append("signers").append(toHex(wrapperBuf.data(), 8))));
+        interest.setApplicationParameters(appParam);
+        m_interestSigningCallback(interest);
+        interest.setCanBePrefix(false);
+        interest.setMustBeFresh(true);
+        interest.setInterestLifetime(INTEREST_TIMEOUT);
+        m_face.expressInterest(interest,
+                               [&, currentId, i](auto && PH1, auto && PH2) { onData(currentId, i, PH1, PH2); },
+                               [&, currentId](auto && PH1, auto && PH2) { onNack(currentId, PH1, PH2); },
+                               [&, currentId](auto && PH1) { onTimeout(currentId, PH1); });
+    }
+
+    NDN_LOG_WARN("Sent all interest to initiate sign");
+    currentRecord.eventId = m_scheduler.schedule(INTEREST_TIMEOUT + ESTIMATE_PROCESS_TIME + INTEREST_TIMEOUT,
+                                                 [&, currentId]{onSignTimeout(currentId);});
+}
+
+void
+Initiator::onWrapperFetch(const Interest& interest)
+{
+    if (m_wrapToId.count(interest.getName())) {
+        int id = m_wrapToId.at(interest.getName());
+        if (m_records.count(id)) {
+            m_face.put(m_records.at(id).wrapper);
+        } else {
+            NDN_LOG_WARN("Unexpected wrapper " << interest);
+            m_face.put(lp::Nack(interest));
+        }
+    } else {
+        NDN_LOG_WARN("Unexpected wrapper " << interest);
+        m_face.put(lp::Nack(interest));
+    }
+}
+
+void
+Initiator::onData(int id, const Name& keyName, const Interest&, const Data& data)
+{
+    if (m_records.count(id) == 0) return;
+    const auto& content = data.getContent();
+    content.parse();
+    const auto& statusBlock = content.get(tlv::Status);
+    if (!statusBlock.isValid()) {
+        NDN_LOG_ERROR("Signer replied data with no status" << "For interest " << data.getName());
+        return;
+    }
+    ReplyCode status = static_cast<ReplyCode>(stoi(readString(statusBlock)));
+    if (status == ReplyCode::Processing) {
+        // schedule another pull
+        time::milliseconds result_ms = ESTIMATE_PROCESS_TIME + ESTIMATE_PROCESS_TIME / 5;
+        const auto& resultAfterBlock = content.get(tlv::ResultAfter);
+        if (resultAfterBlock.isValid()) {
+            result_ms = time::milliseconds(readNonNegativeInteger(resultAfterBlock));
+        }
+        const auto& resultAtBlock = content.get(tlv::ResultName);
+        Name resultName;
+        if (!resultAtBlock.isValid()) {
+            NDN_LOG_ERROR("Signer processing but no result name replied: data for" << data.getName());
+            return;
+        } else {
+            try {
+                resultName = Name(resultAtBlock.blockFromValue());
+            } catch (const std::exception& e) {
+                NDN_LOG_ERROR("Signer processing but bad result name replied: data for" << data.getName());
+                return;
+            }
+        }
+        m_scheduler.schedule(result_ms, [&]{
+            Interest interest;
+            interest.setName(resultName);
+            interest.setCanBePrefix(false);
+            interest.setMustBeFresh(true);
+            interest.setInterestLifetime(INTEREST_TIMEOUT);
+            m_face.expressInterest(interest,
+                                   [&, id, keyName](auto && PH1, auto && PH2) { onData(id, keyName, PH1, PH2); },
+                                   [&, id](auto && PH1, auto && PH2) { onNack(id, PH1, PH2); },
+                                   [&, id](auto && PH1) { onTimeout(id, PH1); });
+        });
+    } else if (status == ReplyCode::OK) {
+        // add to record, may call success
+
+        const Block& b = content.get(tlv::SignatureValue);
+        if (!b.isValid()) {
+            NDN_LOG_ERROR("Signer OK but bad signature value decoding failed: data for" << data.getName());
+            return;
+        }
+        blsSignature sig;
+        int re = blsSignatureDeserialize(&sig, b.value(), b.value_size());
+        if (re == 0) {
+            NDN_LOG_ERROR("Signer OK but bad signature value decoding failed: data for" << data.getName());
+            return;
+        }
+
+        auto& record = m_records.at(id);
+        m_verifier.verifySignaturePiece(*record.unsignedData, record.sigInfo, keyName, b);
+        record.signaturePieces.emplace(keyName, sig);
+        if (record.signaturePieces.size() >= record.schema.signers.size() + record.schema.minOptionalSigners) {
+            std::vector<Name> successPiece(record.signaturePieces.size());
+            for (const auto &i : record.signaturePieces) {
+                successPiece.emplace_back(i.first);
+            }
+            if (record.schema.getMinSigners(successPiece).has_value()) {
+                //success
+                successCleanup(id);
+            }
+        }
+    } else {
+        NDN_LOG_ERROR("Signer replied status: " << static_cast<int>(status) << "For interest " << data.getName());
+        return;
+    }
+}
+
+void
+Initiator::onNack(int id, const Interest& interest, const lp::Nack& nack)
+{
+    NDN_LOG_ERROR("NACK on interest " << interest.getName() << "For id "<< id << " With reason " << nack.getReason());
+}
+
+void
+Initiator::onTimeout(int id, const Interest& interest)
+{
+    NDN_LOG_ERROR("Timeout on interest " << interest.getName() << "For id "<< id);
+}
+
+void
+Initiator::onRegisterFail(const Name& prefix, const std::string& reason){
+    NDN_LOG_ERROR("Fail to register prefix " << prefix.toUri() << " because " << reason);
+}
+
+void
+Initiator::onSignTimeout(int id){
+    if (m_records.count(id) == 0) return;
+    auto record = m_records.at(id);
+    std::vector<Name> successPiece(record.signaturePieces.size());
+    for (const auto& i : record.signaturePieces) {
+        successPiece.emplace_back(i.first);
+    }
+    if (record.schema.getMinSigners(successPiece).has_value()) {
+        //success
+        successCleanup(id);
+    } else {
+        //failure
+        record.onFailure(std::string("Insufficient signature piece at timeout; collected ") +
+                        std::to_string(successPiece.size()) + std::string(" Pieces"));
+        NDN_LOG_ERROR("Insufficient signature piece at timeout; collected "<< successPiece.size() << " Pieces");
+    }
+
+    m_wrapToId.erase(record.wrapper.getFullName());
+    m_records.erase(id);
+}
+
+void
+Initiator::successCleanup(int id)
+{
+    if (m_records.count(id) == 0) return;
+    const auto& record = m_records.at(id);
+
+    std::vector<Name> successPiece(record.signaturePieces.size());
+    std::vector<blsSignature> pieces(record.signaturePieces.size());
+    for (const auto& i : record.signaturePieces) {
+        successPiece.emplace_back(i.first);
+        pieces.emplace_back(i.second);
+    }
+
+    MpsSignerList signerList(successPiece);
+    Data signerListData;
+    signerListData.setName(record.sigInfo.getKeyLocator().getName());
+    signerListData.setContent(makeNestedBlock(tlv::Content, signerList));
+    //TODO sign?
+
+    buildMultiSignature(*record.unsignedData,
+                        record.sigInfo,
+                        pieces
+                        );
+
+    if (record.onSuccess) {
+        record.onSuccess(record.unsignedData, std::move(signerListData));
+    }
+
+    m_wrapToId.erase(record.wrapper.getFullName());
+    m_records.erase(id);
 }
 
 } // namespace ndn

@@ -121,8 +121,6 @@ public:
     void
     buildMultiSignature(Data& data, const SignatureInfo& sigInfo,
                         const std::vector<blsSignature>& collectedPiece) const;
-    static optional<SignatureInfo>
-    getMinMPSignatureInfo(const MultipartySchema& schema, const std::vector<Name>& availableSingerKeys);
 
 };
 

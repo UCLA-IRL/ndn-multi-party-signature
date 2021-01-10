@@ -99,6 +99,23 @@ MultipartySchema::parseAssert(bool criterion)
     }
 }
 
+std::vector<Name>
+MultipartySchema::getKeyMatches(const Name& key) const
+{
+    std::vector<Name> matches;
+    for (const auto& signer: signers) {
+        if (signer.match(key)) {
+            matches.emplace_back(signer);
+        }
+    }
+    for (const auto& signer: optionalSigners) {
+        if (signer.match(key)) {
+            matches.emplace_back(signer);
+        }
+    }
+    return matches;
+}
+
 bool
 MultipartySchema::verifyKeyLocator(const MpsSignerList& locator) const
 {
