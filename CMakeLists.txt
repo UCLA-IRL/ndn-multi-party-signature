@@ -7,16 +7,21 @@ set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/CMake/Modules)
 set(BLS_ROOT ${CMAKE_SOURCE_DIR}/external/bls)
 set(MCL_ROOT ${CMAKE_SOURCE_DIR}/external/mcl)
 
+message("Check dependency: MCL")
 if((NOT EXISTS "${MCL_ROOT}/lib/libmcl.a") OR (NOT EXISTS "${MCL_ROOT}/lib/libmclbn384_256.a"))
+   message("Build dependency from MCL: libmcl.a, lib/libmclbn384_256.a")
    execute_process(COMMAND make lib/libmcl.a lib/libmclbn384_256.a
    WORKING_DIRECTORY ${MCL_ROOT})
 endif((NOT EXISTS "${MCL_ROOT}/lib/libmcl.a") OR (NOT EXISTS "${MCL_ROOT}/lib/libmclbn384_256.a"))
 
+message("Check dependency: BLS")
 if(NOT EXISTS "${BLS_ROOT}/lib/libbls384_256.a")
+   message("Build dependency from BLS: libbls384_256.a")
    execute_process(COMMAND make BLS_ETH=1 MCL_USE_GMP=0 lib/libbls384_256.a
     WORKING_DIRECTORY ${BLS_ROOT})
 endif(NOT EXISTS "${BLS_ROOT}/lib/libbls384_256.a")
 
+message("Check dependency: JSON")
 FetchContent_Declare(json
   GIT_REPOSITORY https://github.com/nlohmann/json.git
   GIT_TAG v3.7.3)
@@ -48,9 +53,9 @@ file(GLOB NDN_MPS_SRC
 
 # include
 include_directories(${NDN_CXX_INCLUDE_DIRS})
+include_directories(${GMP_INCLUDES})
 include_directories(${MCL_ROOT}/include)
 include_directories(${BLS_ROOT}/include)
-include_directories("${GMP_INCLUDES}")
 
 # link
 link_directories(${NDN_CXX_LIBRARY_DIRS})
@@ -64,9 +69,9 @@ target_compile_options(ndnmps PUBLIC ${NDN_CXX_CFLAGS} )
 target_link_libraries(ndnmps PUBLIC
 ${NDN_CXX_LIBRARIES}
 ${GMP_LIBRARIES}
-${CMAKE_SOURCE_DIR}/external/mcl/lib/libmcl.a
-${CMAKE_SOURCE_DIR}/external/mcl/lib/libmclbn384_256.a
 ${CMAKE_SOURCE_DIR}/external/bls/lib/libbls384_256.a
+${CMAKE_SOURCE_DIR}/external/mcl/lib/libmclbn384_256.a
+${CMAKE_SOURCE_DIR}/external/mcl/lib/libmcl.a
 nlohmann_json::nlohmann_json)
 
 add_executable(unit-test ./tests/unit-test.cpp)

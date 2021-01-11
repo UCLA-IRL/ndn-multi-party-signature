@@ -25,17 +25,17 @@ bls_library_init()
   }
 }
 
-MpsSigner::MpsSigner(Name signerName)
+MpsSigner::MpsSigner(const Name& signerName)
 {
-  m_signerName = std::move(signerName);
+  m_signerName = signerName;
   bls_library_init();
   blsSecretKeySetByCSPRNG(&m_sk);
   blsGetPublicKey(&m_pk, &m_sk);
 }
 
-MpsSigner::MpsSigner(Name signerName, Buffer secretKeyBuf)
+MpsSigner::MpsSigner(const Name& signerName, const Buffer& secretKeyBuf)
 {
-  m_signerName = std::move(signerName);
+  m_signerName = signerName;
   bls_library_init();
   auto ret = blsSecretKeyDeserialize(&m_sk, secretKeyBuf.data(), secretKeyBuf.size());
   if (ret == 0) {
@@ -80,9 +80,7 @@ MpsSigner::getSignature(Data data, const SignatureInfo& sigInfo) const
   if (sigInfo.getSignatureType() != tlv::SignatureSha256WithBls) {
     NDN_THROW(std::runtime_error("Signer got non-BLS signature type"));
   }
-
   data.setSignatureInfo(sigInfo);
-
   return getSignature(data);
 }
 

@@ -1,9 +1,8 @@
 #ifndef NDNMPS_CRYPTO_PLAYERS_HPP
 #define NDNMPS_CRYPTO_PLAYERS_HPP
 
-#include <mcl/bn_c384_256.h>
-
-#include <bls/bls.hpp>
+#define BLS_ETH
+#include <bls/bls384_256.h>
 #include <iostream>
 #include <map>
 #include <ndn-cxx/data.hpp>
@@ -23,12 +22,12 @@ public:
   /**
    * @brief Generate public and secret key pair.
    */
-  MpsSigner(Name signerName);
+  MpsSigner(const Name& signerName);
 
   /**
    * @brief Initialize public and secret key pair from secret key serialization.
    */
-  MpsSigner(Name signerName, Buffer secretKeyBuf);
+  MpsSigner(const Name& signerName, const Buffer& secretKeyBuf);
 
   /**
    * @brief Get identity name.
