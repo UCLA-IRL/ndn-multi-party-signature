@@ -25,11 +25,8 @@ Signer::Signer(MpsSigner mpsSigner, const Name& prefix, Face& face)
 
   Name resultPrefix = m_prefix;
   resultPrefix.append("mps").append("result-of");
-  m_handles.push_back(m_face.setInterestFilter(
-      resultPrefix, [&](auto&&, auto&& PH2) { onResult(PH2); }, nullptr,
-      Signer::onRegisterFail));
-
-  m_nextRequestId = random::generateSecureWord64();
+  m_handles.push_back(m_face.setInterestFilter(resultPrefix, [&](auto &&, auto && PH2) { onResult(PH2); }, nullptr,
+                                               Signer::onRegisterFail));
 }
 
 Signer::~Signer()
@@ -65,63 +62,65 @@ Signer::onInvocation(const Interest& interest)
     return;
   }
   //parse
-  const auto& b = interest.getApplicationParameters();
+  const auto &b = interest.getApplicationParameters();
   b.parse();
   Name wrapperName;
   try {
-    for (const auto& item : b.elements()) {
+    for (const auto &item : b.elements()) {
       if (item.type() == tlv::UnsignedWrapperName && wrapperName.empty()) {
         wrapperName = Name(item.blockFromValue());
-      }
-      else if (item.type() == tlv::SignerListName && info.signerListName.empty()) {
+      } else if (item.type() == tlv::SignerListName && info.signerListName.empty()) {
         info.signerListName = Name(item.blockFromValue());
-      }
-      else {
+      } else {
         NDN_THROW(std::runtime_error("Bad element type in signer's request"));
       }
     }
     if (wrapperName.empty() || info.signerListName.empty() || !wrapperName.at(-1).isImplicitSha256Digest()) {
       NDN_THROW(std::runtime_error("Block Element not found"));
     }
-  }
-  catch (const std::exception& e) {
+  } catch (const std::exception &e) {
     NDN_LOG_ERROR("Got error in decoding invocation request: " << e.what());
     replyError(interest.getName(), ReplyCode::BadRequest);
     return;
   }
 
   //add
-  m_states.emplace(m_nextRequestId, info);
-  m_unsignedNames.emplace(wrapperName, m_nextRequestId);
-  reply(interest.getName(), m_nextRequestId);
-  m_nextRequestId++;
+  uint32_t id = random::generateSecureWord32();
+  if (m_states.count(id)) id = random::generateSecureWord32();
+  m_states.emplace(id, info);
+  m_unsignedNames.emplace(wrapperName, id);
+  reply(interest.getName(), id);
 
   //fetch
   Interest fetchInterest(wrapperName);
   fetchInterest.setCanBePrefix(false);
   fetchInterest.setMustBeFresh(true);
   fetchInterest.setInterestLifetime(INTEREST_TIMEOUT);
-  m_face.expressInterest(
-      fetchInterest,
-      [&](auto&& PH1, auto&& PH2) { onData(PH1, PH2); },
-      [&](auto&& PH1, auto&& PH2) { onNack(PH1, PH2); },
-      [&](auto&& PH1) { onTimeout(PH1); });
+  m_face.expressInterest(fetchInterest,
+                         [&](auto &&PH1, auto &&PH2) { onData(PH1, PH2); },
+                         [&](auto &&PH1, auto &&PH2) { onNack(PH1, PH2); },
+                         [&](auto &&PH1) { onTimeout(PH1); });
 }
 
 void
-Signer::onResult(const Interest& interest)
-{
+Signer::onResult(const Interest& interest) {
   //parse
-  if (interest.getName().size() != m_prefix.size() + 3) {
-    NDN_LOG_ERROR("Bad result request length");
+  if (interest.getName().size() < m_prefix.size() + 3 || interest.getName().size() > m_prefix.size() + 4
+      || !interest.getName().get(m_prefix.size() + 2).isNumber()) {
+    NDN_LOG_ERROR("Bad result request name format");
+    replyError(interest.getName(), ReplyCode::BadRequest);
+  } else if (interest.getName().size() == m_prefix.size() + 4 && !interest.getName().get(-1).isVersion()) {
+    NDN_LOG_ERROR("Bad result request version");
     replyError(interest.getName(), ReplyCode::BadRequest);
   }
-  const auto& resultId = readString(interest.getName().at(m_prefix.size() + 2));
-  uint64_t requestId = std::stoll(resultId.substr(0, resultId.find('_')));
+  int requestId = interest.getName().get(m_prefix.size() + 2).toNumber();
+  int versionNum = interest.getName().size() != m_prefix.size() + 4 ? 0 :
+                   (int) interest.getName().get(m_prefix.size() + 3).toVersion();
 
-  const auto& it = m_states.find(requestId);
+  const auto &it = m_states.find(requestId);
   if (it != m_states.end() && it->second.status == ReplyCode::Processing) {
     it->second.versionCount++;
+    if (it->second.versionCount < versionNum) it->second.versionCount = versionNum;
   }
   if (it->second.status == ReplyCode::OK && !it->second.value.has_value()) {
     it->second.status = ReplyCode::InternalError;
@@ -133,28 +132,32 @@ Signer::onResult(const Interest& interest)
 }
 
 void
-Signer::reply(const Name& interestName, int requestId) const
-{
-  const auto& it = m_states.find(requestId);
+Signer::reply(const Name& interestName, int requestId) const {
+  const auto &it = m_states.find(requestId);
   if (it == m_states.end()) {
     replyError(interestName, ReplyCode::NotFound);
     return;
   }
   Data data;
-  data.setName(interestName);
+  if (interestName.get(-1).isVersion()) {
+    data.setName(interestName);
+  } else if (readString(interestName.get(m_prefix.size() + 1)) == "result-of") {
+    data.setName(Name(interestName).appendVersion(it->second.versionCount));
+  } else {
+    data.setName(interestName);
+  }
+
   Block block(tlv::Content);
   block.push_back(makeStringBlock(tlv::Status,
                                   std::to_string(static_cast<int>(it->second.status))));
   if (it->second.status == ReplyCode::Processing) {
     block.push_back(makeNonNegativeIntegerBlock(tlv::ResultAfter, ESTIMATE_PROCESS_TIME.count()));
     Name newResultName = m_prefix;
-    newResultName.append("mps").append("result-of").append(std::to_string(requestId) + "_" + std::to_string(it->second.versionCount));
+    newResultName.append("mps").append("result-of").appendNumber(requestId);
     block.push_back(makeNestedBlock(tlv::ResultName, newResultName));
-  }
-  else if (it->second.status == ReplyCode::OK) {
+  } else if (it->second.status == ReplyCode::OK) {
     block.push_back(*it->second.value);
-  }
-  else {
+  } else {
     replyError(interestName, it->second.status);
     return;
   }
@@ -517,37 +520,35 @@ Initiator::onWrapperFetch(const Interest& interest)
 }
 
 void
-Initiator::onData(int id, const Name& keyName, const Interest&, const Data& data)
-{
-  if (m_records.count(id) == 0)
-    return;
-  const auto& content = data.getContent();
+Initiator::onData(int id, const Name& keyName, const Interest&, const Data& data) {
+  if (m_records.count(id) == 0) return;
+  const auto &content = data.getContent();
   content.parse();
-  const auto& statusBlock = content.get(tlv::Status);
+  const auto &statusBlock = content.get(tlv::Status);
   if (!statusBlock.isValid()) {
-    NDN_LOG_ERROR("Signer replied data with no status"
-                  << "For interest " << data.getName());
+    NDN_LOG_ERROR("Signer replied data with no status" << "For interest " << data.getName());
     return;
   }
   ReplyCode status = static_cast<ReplyCode>(stoi(readString(statusBlock)));
   if (status == ReplyCode::Processing) {
     // schedule another pull
     time::milliseconds result_ms = ESTIMATE_PROCESS_TIME + ESTIMATE_PROCESS_TIME / 5;
-    const auto& resultAfterBlock = content.get(tlv::ResultAfter);
+    const auto &resultAfterBlock = content.get(tlv::ResultAfter);
     if (resultAfterBlock.isValid()) {
       result_ms = time::milliseconds(readNonNegativeInteger(resultAfterBlock));
     }
-    const auto& resultAtBlock = content.get(tlv::ResultName);
+    const auto &resultAtBlock = content.get(tlv::ResultName);
     Name resultName;
     if (!resultAtBlock.isValid()) {
       NDN_LOG_ERROR("Signer processing but no result name replied: data for" << data.getName());
       return;
-    }
-    else {
+    } else {
       try {
         resultName = Name(resultAtBlock.blockFromValue());
-      }
-      catch (const std::exception& e) {
+        if (data.getName().get(-1).isVersion()) {
+          resultName.appendVersion(data.getName().get(-1).toVersion() + 1);
+        }
+      } catch (const std::exception &e) {
         NDN_LOG_ERROR("Signer processing but bad result name replied: data for" << data.getName());
         return;
       }
@@ -558,17 +559,15 @@ Initiator::onData(int id, const Name& keyName, const Interest&, const Data& data
       interest.setCanBePrefix(false);
       interest.setMustBeFresh(true);
       interest.setInterestLifetime(INTEREST_TIMEOUT);
-      m_face.expressInterest(
-          interest,
-          [&, id, keyName](auto&& PH1, auto&& PH2) { onData(id, keyName, PH1, PH2); },
-          [&, id](auto&& PH1, auto&& PH2) { onNack(id, PH1, PH2); },
-          [&, id](auto&& PH1) { onTimeout(id, PH1); });
+      m_face.expressInterest(interest,
+                             [&, id, keyName](auto &&PH1, auto &&PH2) { onData(id, keyName, PH1, PH2); },
+                             [&, id](auto &&PH1, auto &&PH2) { onNack(id, PH1, PH2); },
+                             [&, id](auto &&PH1) { onTimeout(id, PH1); });
     });
-  }
-  else if (status == ReplyCode::OK) {
+  } else if (status == ReplyCode::OK) {
     // add to record, may call success
 
-    const Block& b = content.get(tlv::SignatureValue);
+    const Block &b = content.get(tlv::SignatureValue);
     if (!b.isValid()) {
       NDN_LOG_ERROR("Signer OK but bad signature value decoding failed: data for" << data.getName());
       return;
@@ -580,12 +579,12 @@ Initiator::onData(int id, const Name& keyName, const Interest&, const Data& data
       return;
     }
 
-    auto& record = m_records.at(id);
+    auto &record = m_records.at(id);
     m_verifier.verifySignaturePiece(*record.unsignedData, keyName, b);
     record.signaturePieces.emplace(keyName, sig);
     if (record.signaturePieces.size() >= record.schema.signers.size() + record.schema.minOptionalSigners) {
       std::vector<Name> successPiece(record.signaturePieces.size());
-      for (const auto& i : record.signaturePieces) {
+      for (const auto &i : record.signaturePieces) {
         successPiece.emplace_back(i.first);
       }
       if (record.schema.getMinSigners(successPiece).has_value()) {
@@ -593,8 +592,7 @@ Initiator::onData(int id, const Name& keyName, const Interest&, const Data& data
         successCleanup(id);
       }
     }
-  }
-  else {
+  } else {
     NDN_LOG_ERROR("Signer replied status: " << static_cast<int>(status) << "For interest " << data.getName());
     return;
   }

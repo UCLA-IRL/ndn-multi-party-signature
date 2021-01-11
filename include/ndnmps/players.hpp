@@ -29,10 +29,8 @@ private:
     optional<Block> value;
     RequestInfo();
   };
-  std::map<int, RequestInfo> m_states;
-  std::map<Name, int> m_unsignedNames;
-  uint64_t m_nextRequestId;
-
+  std::unordered_map<int, RequestInfo> m_states;
+  std::unordered_map<Name, int> m_unsignedNames;
 public:
   /**
    * @brief Generate public and secret key pair.
