@@ -24,13 +24,13 @@ private:
 
   struct RequestInfo {
     ReplyCode status;
-    int versionCount;
+    uint64_t versionCount;
     Name signerListName;
     optional<Block> value;
     RequestInfo();
   };
-  std::unordered_map<int, RequestInfo> m_states;
-  std::unordered_map<Name, int> m_unsignedNames;
+  std::map<Buffer, RequestInfo> m_states;
+  std::map<Name, Buffer> m_unsignedNames;
 public:
   /**
    * @brief Generate public and secret key pair.
@@ -52,7 +52,7 @@ private:
   onResult(const Interest&);
 
   void
-  reply(const Name& interestName, int requestId) const;
+  reply(const Name& interestName, ConstBufferPtr requestId) const;
 
   void
   replyError(const Name& interestName, ReplyCode errorCode) const;
@@ -78,11 +78,10 @@ private:
     shared_ptr<const Data> data;
     shared_ptr<const MultipartySchema> schema;
     const VerifyFinishCallback callback;
-    int itemLeft;
+    uint32_t itemLeft;
   };
-  std::map<int, VerificationRecord> m_queue;
-  int m_queueLast = 0;
-  std::map<Name, std::set<int>> m_index;
+  std::map<uint32_t, VerificationRecord> m_queue;
+  std::map<Name, std::set<uint32_t>> m_index;
   Face& m_face;
   function<bool(const Data&)> m_certVerifyCallback;
 
@@ -134,9 +133,8 @@ private:
   std::map<Name, Name> m_keyToPrefix;
   const Name m_prefix;
   optional<RegisteredPrefixHandle> m_handle;
-  std::map<int, InitiationRecord> m_records;
-  std::map<Name, int> m_wrapToId;
-  int m_lastId;
+  std::map<uint32_t, InitiationRecord> m_records;
+  std::map<Name, uint32_t> m_wrapToId;
   std::function<void(Interest&)> m_interestSigningCallback;
 
 public:
@@ -161,22 +159,22 @@ private:
   onWrapperFetch(const Interest&);
 
   void
-  onData(int id, const Name& keyName, const Interest&, const Data& data);
+  onData(uint32_t id, const Name& keyName, const Interest&, const Data& data);
 
   void
-  onNack(int id, const Interest&, const lp::Nack& nack);
+  onNack(uint32_t id, const Interest&, const lp::Nack& nack);
 
   void
-  onTimeout(int id, const Interest&);
+  onTimeout(uint32_t id, const Interest&);
 
   static void
   onRegisterFail(const Name& prefix, const std::string& reason);
 
   void
-  onSignTimeout(int id);
+  onSignTimeout(uint32_t id);
 
   void
-  successCleanup(int id);
+  successCleanup(uint32_t id);
 };
 
 }  // namespace ndn

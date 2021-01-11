@@ -85,10 +85,18 @@ Signer::onInvocation(const Interest& interest)
   }
 
   //add
-  uint32_t id = random::generateSecureWord32();
-  if (m_states.count(id)) id = random::generateSecureWord32();
-  m_states.emplace(id, info);
-  m_unsignedNames.emplace(wrapperName, id);
+  if (!interest.getName().get(-1).isParametersSha256Digest()) {
+    NDN_LOG_ERROR("interest not end with parameter SHA digest: " << interest.getName());
+    return;
+  }
+  auto id = interest.getName().get(-1).getBuffer();
+  while (m_states.count(*id)) {
+    Buffer newBuffer(32);
+    random::generateSecureBytes(newBuffer.data(), 32);
+    id = make_shared<const Buffer>(newBuffer);
+  }
+  m_states.emplace(*id, info);
+  m_unsignedNames.emplace(wrapperName, *id);
   reply(interest.getName(), id);
 
   //fetch
@@ -113,11 +121,11 @@ Signer::onResult(const Interest& interest) {
     NDN_LOG_ERROR("Bad result request version");
     replyError(interest.getName(), ReplyCode::BadRequest);
   }
-  int requestId = interest.getName().get(m_prefix.size() + 2).toNumber();
-  int versionNum = interest.getName().size() != m_prefix.size() + 4 ? 0 :
-                   (int) interest.getName().get(m_prefix.size() + 3).toVersion();
+  auto requestId = interest.getName().get(m_prefix.size() + 2).getBuffer();
+  uint64_t versionNum = interest.getName().size() != m_prefix.size() + 4 ? 0 :
+                    interest.getName().get(m_prefix.size() + 3).toVersion();
 
-  const auto &it = m_states.find(requestId);
+  const auto &it = m_states.find(*requestId);
   if (it != m_states.end() && it->second.status == ReplyCode::Processing) {
     it->second.versionCount++;
     if (it->second.versionCount < versionNum) it->second.versionCount = versionNum;
@@ -132,16 +140,14 @@ Signer::onResult(const Interest& interest) {
 }
 
 void
-Signer::reply(const Name& interestName, int requestId) const {
-  const auto &it = m_states.find(requestId);
+Signer::reply(const Name& interestName, ConstBufferPtr requestId) const {
+  const auto &it = m_states.find(*requestId);
   if (it == m_states.end()) {
     replyError(interestName, ReplyCode::NotFound);
     return;
   }
   Data data;
-  if (interestName.get(-1).isVersion()) {
-    data.setName(interestName);
-  } else if (readString(interestName.get(m_prefix.size() + 1)) == "result-of") {
+  if (readString(interestName.get(m_prefix.size() + 1)) == "result-of" && !interestName.get(-1).isVersion()) {
     data.setName(Name(interestName).appendVersion(it->second.versionCount));
   } else {
     data.setName(interestName);
@@ -153,7 +159,7 @@ Signer::reply(const Name& interestName, int requestId) const {
   if (it->second.status == ReplyCode::Processing) {
     block.push_back(makeNonNegativeIntegerBlock(tlv::ResultAfter, ESTIMATE_PROCESS_TIME.count()));
     Name newResultName = m_prefix;
-    newResultName.append("mps").append("result-of").appendNumber(requestId);
+    newResultName.append("mps").append("result-of").appendParametersSha256Digest(requestId);
     block.push_back(makeNestedBlock(tlv::ResultName, newResultName));
   } else if (it->second.status == ReplyCode::OK) {
     block.push_back(*it->second.value);
@@ -210,14 +216,12 @@ Signer::onData(const Interest& interest, const Data& data)
     }
   }
 
-  int id;
-  if (m_unsignedNames.count(interest.getName()) != 0) {
-    id = m_unsignedNames.at(interest.getName());
-    m_unsignedNames.erase(interest.getName());
-  }
-  else {
+
+  if (m_unsignedNames.count(interest.getName()) == 0) {
     return;
   }
+  const Buffer& id = m_unsignedNames.at(interest.getName());
+  m_unsignedNames.erase(interest.getName());
   if (m_states.count(id) == 0)
     return;
   RequestInfo& state = m_states.at(id);
@@ -277,29 +281,27 @@ Verifier::setCertVerifyCallback(const function<bool(const Data&)>& func)
 }
 
 void
-Verifier::asyncVerifySignature(shared_ptr<const Data> data, shared_ptr<const MultipartySchema> schema, const VerifyFinishCallback& callback)
-{
+Verifier::asyncVerifySignature(shared_ptr<const Data> data, shared_ptr<const MultipartySchema> schema, const VerifyFinishCallback& callback) {
+  uint32_t currentId = random::generateSecureWord32();
   if (readyToVerify(*data)) {
     callback(verifySignature(*data, *schema));
-  }
-  else {
+  } else {
     //store, fetch and wait
     VerificationRecord r{data, schema, callback, 0};
-    for (const auto& item : itemsToFetch(*data)) {
+    for (const auto &item : itemsToFetch(*data)) {
       Interest interest(item);
       interest.setCanBePrefix(false);
       interest.setMustBeFresh(true);
       interest.setInterestLifetime(INTEREST_TIMEOUT);
       m_face.expressInterest(
-          interest,
-          [&](auto&& PH1, auto&& PH2) { onData(PH1, PH2); },
-          [&](auto&& PH1, auto&& PH2) { onNack(PH1, PH2); },
-          [&](auto&& PH1) { onTimeout(PH1); });
-      m_index[item].insert(m_queueLast);
+              interest,
+              [&](auto &&PH1, auto &&PH2) { onData(PH1, PH2); },
+              [&](auto &&PH1, auto &&PH2) { onNack(PH1, PH2); },
+              [&](auto &&PH1) { onTimeout(PH1); });
+      m_index[item].insert(currentId);
       r.itemLeft++;
     }
-    m_queue.emplace(m_queueLast, r);
-    m_queueLast++;
+    m_queue.emplace(currentId, r);
   }
 }
 
@@ -390,7 +392,6 @@ Initiator::Initiator(MpsVerifier& verifier, const Name& prefix, Face& face, Sche
     , m_prefix(prefix)
     , m_face(face)
     , m_scheduler(scheduler)
-    , m_lastId(0)
 {
   m_handle = m_face.setInterestFilter(
       m_prefix, [&](auto&&, auto&& PH2) { onWrapperFetch(PH2); }, nullptr,
@@ -453,10 +454,9 @@ Initiator::multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> 
   }
 
   //register
-  m_records.emplace(m_lastId, InitiationRecord(schema, unfinishedData, successCb, failureCb));
-  auto& currentRecord = m_records.at(m_lastId);
-  int currentId = m_lastId;
-  m_lastId++;
+  uint32_t currentId = random::generateSecureWord32();
+  m_records.emplace(currentId, InitiationRecord(schema, std::move(unfinishedData), successCb, failureCb));
+  auto& currentRecord = m_records.at(currentId);
 
   //build signature info packet
   std::array<uint8_t, 8> wrapperBuf = {};
@@ -504,7 +504,7 @@ void
 Initiator::onWrapperFetch(const Interest& interest)
 {
   if (m_wrapToId.count(interest.getName())) {
-    int id = m_wrapToId.at(interest.getName());
+    auto id = m_wrapToId.at(interest.getName());
     if (m_records.count(id)) {
       m_face.put(m_records.at(id).wrapper);
     }
@@ -520,7 +520,7 @@ Initiator::onWrapperFetch(const Interest& interest)
 }
 
 void
-Initiator::onData(int id, const Name& keyName, const Interest&, const Data& data) {
+Initiator::onData(uint32_t id, const Name& keyName, const Interest&, const Data& data) {
   if (m_records.count(id) == 0) return;
   const auto &content = data.getContent();
   content.parse();
@@ -599,13 +599,13 @@ Initiator::onData(int id, const Name& keyName, const Interest&, const Data& data
 }
 
 void
-Initiator::onNack(int id, const Interest& interest, const lp::Nack& nack)
+Initiator::onNack(uint32_t id, const Interest& interest, const lp::Nack& nack)
 {
   NDN_LOG_ERROR("NACK on interest " << interest.getName() << "For id " << id << " With reason " << nack.getReason());
 }
 
 void
-Initiator::onTimeout(int id, const Interest& interest)
+Initiator::onTimeout(uint32_t id, const Interest& interest)
 {
   NDN_LOG_ERROR("Timeout on interest " << interest.getName() << "For id " << id);
 }
@@ -617,7 +617,7 @@ Initiator::onRegisterFail(const Name& prefix, const std::string& reason)
 }
 
 void
-Initiator::onSignTimeout(int id)
+Initiator::onSignTimeout(uint32_t id)
 {
   if (m_records.count(id) == 0)
     return;
@@ -642,7 +642,7 @@ Initiator::onSignTimeout(int id)
 }
 
 void
-Initiator::successCleanup(int id)
+Initiator::successCleanup(uint32_t id)
 {
   if (m_records.count(id) == 0)
     return;
