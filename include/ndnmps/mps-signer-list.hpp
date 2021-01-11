@@ -5,68 +5,67 @@
 #ifndef NDNMPS_MPS_SIGNER_LIST_HPP
 #define NDNMPS_MPS_SIGNER_LIST_HPP
 
-#include "ndnmps/common.hpp"
-#include <vector>
 #include <ndn-cxx/key-locator.hpp>
+#include <vector>
+
+#include "ndnmps/common.hpp"
 
 namespace ndn {
 
-class MpsSignerList
-{
+class MpsSignerList {
 public:
-    class Error : public tlv::Error
-    {
-    public:
-        using tlv::Error::Error;
-    };
-public: // constructors
-    /** \brief Construct an empty list.
+  class Error : public tlv::Error {
+  public:
+    using tlv::Error::Error;
+  };
+
+public:  // constructors
+  /** \brief Construct an empty list.
      *  \post `empty() == true`
      */
-    MpsSignerList();
+  MpsSignerList();
 
-    /** \brief Construct from vector of names.
+  /** \brief Construct from vector of names.
      *  \note Implicit conversion is permitted.
      *  \post `getType() == tlv::Name`
      */
-    MpsSignerList(std::vector<Name>  signers);
+  MpsSignerList(std::vector<Name> signers);
 
-    /** \brief Construct from wire encoding.
+  /** \brief Construct from wire encoding.
      */
-    explicit
-    MpsSignerList(const Block& wire);
+  explicit MpsSignerList(const Block& wire);
 
-public: // encode and decode
-    /** \brief Prepend wire encoding to \p encoder.
+public:  // encode and decode
+  /** \brief Prepend wire encoding to \p encoder.
      */
-    template<encoding::Tag TAG>
-    size_t
-    wireEncode(EncodingImpl<TAG>& encoder) const;
+  template <encoding::Tag TAG>
+  size_t
+  wireEncode(EncodingImpl<TAG>& encoder) const;
 
-    const Block&
-    wireEncode() const;
+  const Block&
+  wireEncode() const;
 
-    /** \brief Decode from wire encoding.
+  /** \brief Decode from wire encoding.
      *  \throw Error outer TLV type is not KeyLocator
      *  \note No error is raised for an unrecognized nested TLV, but attempting to reencode will throw.
      */
-    void
-    wireDecode(const Block& wire);
+  void
+  wireDecode(const Block& wire);
 
-    const std::vector<Name>&
-    getSigners() const;
+  const std::vector<Name>&
+  getSigners() const;
 
-    std::vector<Name>&
-    getSigners();
+  std::vector<Name>&
+  getSigners();
 
-    void
-    setSigners(const std::vector<Name>& locators);
+  void
+  setSigners(const std::vector<Name>& locators);
 
 private:
-    std::vector<Name> m_locators;
-    mutable Block m_wire;
+  std::vector<Name> m_locators;
+  mutable Block m_wire;
 };
 
-} // namespace ndn
+}  // namespace ndn
 
-#endif //NDNMPS_MPS_SIGNER_LIST_HPP
+#endif  //NDNMPS_MPS_SIGNER_LIST_HPP

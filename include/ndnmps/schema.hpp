@@ -1,19 +1,19 @@
 #ifndef NDNMPS_SCHEMA_HPP
 #define NDNMPS_SCHEMA_HPP
 
-#include <nlohmann/json.hpp>
-#include <set>
 #include <list>
 #include <ndn-cxx/name.hpp>
+#include <nlohmann/json.hpp>
+#include <set>
+
 #include "mps-signer-list.hpp"
 
 using Json = nlohmann::json;
 
 namespace ndn {
 
-class WildCardName: public Name {
+class WildCardName : public Name {
 public:
-
   using Name::Name;
 
   bool
@@ -24,8 +24,7 @@ public:
  * @brief JSON based configuration file to guide signing and verification.
  * TODO can be let a schema refer to other schema? we can make much more complex rules from it.
  */
-class MultipartySchema
-{
+class MultipartySchema {
 public:
   Name prefix;
   std::string ruleId;
@@ -54,6 +53,7 @@ public:
 
   bool
   verifyKeyLocator(const MpsSignerList& locator) const;
+
 private:
   static void
   parseAssert(bool criterion);
@@ -66,6 +66,6 @@ private:
   fordFulkersonDFS(const std::map<int, std::set<int>>& adjList, int start, int end, std::list<int>& path);
 };
 
-} // namespace ndn
+}  // namespace ndn
 
-#endif // NDNMPS_SCHEMA_HPP
+#endif  // NDNMPS_SCHEMA_HPP

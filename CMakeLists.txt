@@ -61,6 +61,7 @@ target_compile_options(ndnmps PUBLIC ${NDN_CXX_CFLAGS} )
 target_link_libraries(ndnmps PUBLIC
 ${NDN_CXX_LIBRARIES}
 ${CMAKE_SOURCE_DIR}/external/mcl/lib/libmcl.a
+${CMAKE_SOURCE_DIR}/external/mcl/lib/libmclbn384_256.a
 ${CMAKE_SOURCE_DIR}/external/bls/lib/libbls384_256.a
 nlohmann_json::nlohmann_json)
 

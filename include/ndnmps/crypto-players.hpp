@@ -1,14 +1,15 @@
 #ifndef NDNMPS_CRYPTO_PLAYERS_HPP
 #define NDNMPS_CRYPTO_PLAYERS_HPP
 
-#include "ndnmps/schema.hpp"
-#include "mps-signer-list.hpp"
 #include <mcl/bn_c384_256.h>
-#include <bls/bls.hpp>
-#include <ndn-cxx/data.hpp>
 
+#include <bls/bls.hpp>
 #include <iostream>
 #include <map>
+#include <ndn-cxx/data.hpp>
+
+#include "mps-signer-list.hpp"
+#include "ndnmps/schema.hpp"
 
 namespace ndn {
 
@@ -63,7 +64,7 @@ public:
   Block
   getSignature(Data data, const SignatureInfo& sigInfo) const;
 
-    /**
+  /**
      * Return the signature value for the packet with signature info already in the data
      * @param data the unsigned data packet with info
      * @return the signature value signed by this signer
@@ -85,10 +86,9 @@ class MpsVerifier {
 private:
   std::map<Name, blsPublicKey> m_certs;
   std::map<Name, MpsSignerList> m_signLists;
-  mutable std::map<Name, blsPublicKey> m_aggregateKey; //should be cache, not from network transmission for security reasons
+  mutable std::map<Name, blsPublicKey> m_aggregateKey;  //should be cache, not from network transmission for security reasons
 
 public:
-
   MpsVerifier();
 
   void
@@ -134,16 +134,16 @@ public:
 
 class MpsAggregater {
 public:
-    MpsAggregater();
+  MpsAggregater();
 
-    void
-    buildMultiSignature(Data& data, const SignatureInfo& sigInfo,
-                        const std::vector<blsSignature>& collectedPiece) const;
+  void
+  buildMultiSignature(Data& data, const SignatureInfo& sigInfo,
+                      const std::vector<blsSignature>& collectedPiece) const;
 
-    void
-    buildMultiSignature(Data& dataWithInfo, const std::vector<blsSignature>& collectedPiece) const;
+  void
+  buildMultiSignature(Data& dataWithInfo, const std::vector<blsSignature>& collectedPiece) const;
 };
 
 }  // namespace ndn
 
-#endif // NDNMPS_CRYPTO_PLAYERS_HPP
+#endif  // NDNMPS_CRYPTO_PLAYERS_HPP

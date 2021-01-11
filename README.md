@@ -6,6 +6,14 @@ Goals:
 * Multi-party signature negotiation protocol
 * Multi-party signature verification scheme with enhanced NDN Trust Schema
 
+## Compile
+
+```bash
+mkdir build
+cd build
+cmake ..
+make
+```
 
 ## Progress Track
 
@@ -17,4 +25,5 @@ Goals:
 
 ## Contact
 
-Zhiyi (zhiyi@cs.ucla.edu)
+* Zhiyi Zhang (zhiyi@cs.ucla.edu)
+* Siqi Liu (tylerliu@g.ucla.edu)

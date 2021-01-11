@@ -5,18 +5,17 @@
 
 namespace ndn {
 
-class MultiPartySignature
-{
+class MultiPartySignature {
 private:
 public:
   MultiPartySignature(/* args */);
   ~MultiPartySignature();
 
 public:
-    static SignatureInfo
-    getMultiPartySignatureInfo(const std::vector<Name>& keys);
+  static SignatureInfo
+  getMultiPartySignatureInfo(const std::vector<Name>& keys);
 };
 
-} // namespace ndn
+}  // namespace ndn
 
-#endif // NDNMPS_MULTI_PARTY_SIGNATURE
+#endif  // NDNMPS_MULTI_PARTY_SIGNATURE
