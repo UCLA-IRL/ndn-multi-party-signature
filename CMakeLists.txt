@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.12)
 include(ExternalProject)
 include(FetchContent)
 
+set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/CMake/Modules)
 set(BLS_ROOT ${CMAKE_SOURCE_DIR}/external/bls)
 set(MCL_ROOT ${CMAKE_SOURCE_DIR}/external/mcl)
 
@@ -38,6 +39,7 @@ set(CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointe
 # dependencies
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(NDN_CXX REQUIRED libndn-cxx)
+find_package(GMP REQUIRED)
 
 # files
 file(GLOB NDN_MPS_SRC
@@ -48,6 +50,7 @@ file(GLOB NDN_MPS_SRC
 include_directories(${NDN_CXX_INCLUDE_DIRS})
 include_directories(${MCL_ROOT}/include)
 include_directories(${BLS_ROOT}/include)
+include_directories("${GMP_INCLUDES}")
 
 # link
 link_directories(${NDN_CXX_LIBRARY_DIRS})
@@ -60,6 +63,7 @@ target_include_directories(ndnmps PRIVATE ./src)
 target_compile_options(ndnmps PUBLIC ${NDN_CXX_CFLAGS} )
 target_link_libraries(ndnmps PUBLIC
 ${NDN_CXX_LIBRARIES}
+${GMP_LIBRARIES}
 ${CMAKE_SOURCE_DIR}/external/mcl/lib/libmcl.a
 ${CMAKE_SOURCE_DIR}/external/mcl/lib/libmclbn384_256.a
 ${CMAKE_SOURCE_DIR}/external/bls/lib/libbls384_256.a
