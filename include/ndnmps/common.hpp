@@ -4,6 +4,19 @@
 #include <cstdint>
 #include <iostream>
 #include <ndn-cxx/encoding/tlv.hpp>
+
+#ifdef NDNMPS_HAVE_TESTS
+#define NDNMPS_VIRTUAL_WITH_TESTS virtual
+#define NDNMPS_PUBLIC_WITH_TESTS_ELSE_PROTECTED public
+#define NDNMPS_PUBLIC_WITH_TESTS_ELSE_PRIVATE public
+#define NDNMPS_PROTECTED_WITH_TESTS_ELSE_PRIVATE protected
+#else
+#define NDNMPS_VIRTUAL_WITH_TESTS
+#define NDNMPS_PUBLIC_WITH_TESTS_ELSE_PROTECTED protected
+#define NDNMPS_PUBLIC_WITH_TESTS_ELSE_PRIVATE private
+#define NDNMPS_PROTECTED_WITH_TESTS_ELSE_PRIVATE private
+#endif
+
 namespace ndn {
 namespace tlv {
 

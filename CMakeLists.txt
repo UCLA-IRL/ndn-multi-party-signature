@@ -74,9 +74,11 @@ ${CMAKE_SOURCE_DIR}/external/mcl/lib/libmclbn384_256.a
 ${CMAKE_SOURCE_DIR}/external/mcl/lib/libmcl.a
 nlohmann_json::nlohmann_json)
 
-add_executable(unit-test ./tests/unit-test.cpp)
-target_include_directories(unit-test PRIVATE ./src)
-target_link_libraries(unit-test PUBLIC ndnmps)
+if (HAVE_TESTS)
+    message("Added Unit Tests")
+    add_compile_definitions(NDNMPS_HAVE_TESTS)
+    add_subdirectory(tests)
+endif(HAVE_TESTS)
 
 install(TARGETS ndnmps
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}

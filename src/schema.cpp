@@ -35,8 +35,8 @@ MultipartySchema::fromString(const std::string& configStr)
   MultipartySchema schema;
   Json content = Json::parse(configStr);
   parseAssert(content.is_object() &&
-              content.find("prefix") != content.end() && content["prefix"].is_string() &&
-              content.find("rule-id") != content.end() && content["rule-id"].is_string() &&
+              content.find("prefix") != content.end() && content.at("prefix").is_string() &&
+              content.find("rule-id") != content.end() && content.at("rule-id").is_string() &&
               content.find("signed-by") != content.end());
   schema.prefix = content.find("prefix")->get<std::string>();
   schema.ruleId = content.find("rule-id")->get<std::string>();
@@ -44,15 +44,15 @@ MultipartySchema::fromString(const std::string& configStr)
 
   parseAssert(signedBy.is_object());
   if (signedBy.find("all-of") != signedBy.end()) {
-    parseAssert(signedBy["all-of"].is_object());
-    for (auto& party : signedBy["all-of"].items()) {
+    parseAssert(signedBy.at("all-of").is_object());
+    for (auto& party : signedBy.at("all-of").items()) {
       parseAssert(party.key() == "key-format" && party.value().is_string());
       schema.signers.emplace_back(party.value().get<std::string>());
     }
   }
   if (signedBy.find("at-least") != signedBy.end()) {
-    parseAssert(signedBy["at-least"].is_object());
-    for (auto& party : signedBy["at-least"].items()) {
+    parseAssert(signedBy.at("at-least").is_object());
+    for (auto& party : signedBy.at("at-least").items()) {
       if (party.key() == "num" && party.value().is_number_unsigned()) {
         schema.minOptionalSigners = party.value().get<size_t>();
       }
