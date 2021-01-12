@@ -13,7 +13,7 @@ if (HAVE_TESTS)
 
     add_definitions(-DTMP_TESTS_PATH="tmp-tests")
     file(GLOB_RECURSE test_source "*.cpp" "unit-tests/*.cpp")
-    add_executable(unit-tests ${test_source})
+    add_executable(unit-tests ${test_source} unit-tests/mps-signer-list.t.cpp)
     target_include_directories(unit-tests PUBLIC .)
     target_link_libraries(unit-tests PUBLIC ndnmps)
     target_link_libraries(unit-tests PUBLIC ${Boost_LIBRARIES})

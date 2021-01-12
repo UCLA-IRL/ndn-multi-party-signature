@@ -27,7 +27,7 @@ BOOST_AUTO_TEST_CASE(SchemaInfoFile)
   //BOOST_CHECK_EQUAL(schema.signers.size(), 2); //TODO fix
 }
 
-BOOST_AUTO_TEST_SUITE_END()  // TestCaConfig
+BOOST_AUTO_TEST_SUITE_END()  // TestSchema
 
 } // namespace tests
 } // namespace ndnmps

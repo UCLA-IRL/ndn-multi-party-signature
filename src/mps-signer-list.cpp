@@ -12,7 +12,7 @@ MpsSignerList::MpsSignerList()
 {
 }
 
-MpsSignerList::MpsSignerList(std::vector<Name> signers)
+MpsSignerList::MpsSignerList(std::set<Name> signers)
     : m_locators(std::move(signers))
 {
 }
@@ -69,27 +69,37 @@ MpsSignerList::wireDecode(const Block& wire)
   m_wire.parse();
 
   for (const auto& e : m_wire.elements()) {
-    m_locators.emplace_back(e);
+    m_locators.emplace(e);
   }
 }
 
-const std::vector<Name>&
+const std::set<Name>&
 MpsSignerList::getSigners() const
 {
   return m_locators;
 }
 
 void
-MpsSignerList::setSigners(const std::vector<Name>& locators)
+MpsSignerList::setSigners(const std::set<Name>& locators)
 {
   m_locators = locators;
   m_wire.reset();
 }
 
-std::vector<Name>&
+std::set<Name>&
 MpsSignerList::getSigners()
 {
   m_wire.reset();
   return m_locators;
+}
+
+std::ostream&
+operator<<(std::ostream& os, const MpsSignerList& signerList)
+{
+  os << "MpsSignerList [ ";
+  for (const auto& i : signerList.getSigners()) {
+    os << i << ", ";
+  }
+  return os << "]";
 }
 }  // namespace ndn

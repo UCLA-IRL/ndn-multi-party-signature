@@ -228,7 +228,7 @@ MpsVerifier::verifySignature(const Data& data, const MultipartySchema& schema) c
       }
     }
     else if (m_certs.count(sigInfo.getKeyLocator().getName()) != 0) {
-      locator.getSigners().emplace_back(sigInfo.getKeyLocator().getName());
+      locator.getSigners().emplace(sigInfo.getKeyLocator().getName());
       aggKey = m_certs.at(sigInfo.getKeyLocator().getName());
       aggKeyInitialized = true;
     }

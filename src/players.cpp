@@ -648,10 +648,10 @@ Initiator::successCleanup(uint32_t id)
     return;
   const auto& record = m_records.at(id);
 
-  std::vector<Name> successPiece(record.signaturePieces.size());
+  std::set<Name> successPiece;
   std::vector<blsSignature> pieces(record.signaturePieces.size());
   for (const auto& i : record.signaturePieces) {
-    successPiece.emplace_back(i.first);
+    successPiece.emplace(i.first);
     pieces.emplace_back(i.second);
   }
 

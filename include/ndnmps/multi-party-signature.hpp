@@ -2,6 +2,7 @@
 #define NDNMPS_MULTI_PARTY_SIGNATURE
 
 #include <ndn-cxx/signature.hpp>
+#include <set>
 
 namespace ndn {
 
@@ -13,7 +14,7 @@ public:
 
 public:
   static SignatureInfo
-  getMultiPartySignatureInfo(const std::vector<Name>& keys);
+  getMultiPartySignatureInfo(const std::set<Name>& keys);
 };
 
 }  // namespace ndn
