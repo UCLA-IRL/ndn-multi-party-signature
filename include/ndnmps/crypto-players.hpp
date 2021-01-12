@@ -1,7 +1,6 @@
 #ifndef NDNMPS_CRYPTO_PLAYERS_HPP
 #define NDNMPS_CRYPTO_PLAYERS_HPP
 
-#define BLS_ETH
 #include <bls/bls384_256.h>
 #include <iostream>
 #include <map>
