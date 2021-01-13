@@ -4,6 +4,7 @@
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/info_parser.hpp>
 #include <boost/property_tree/json_parser.hpp>
+#include <utility>
 
 namespace ndn {
 
@@ -48,6 +49,22 @@ fromSchemaSection(const SchemaSection& config)
   return schema;
 }
 
+WildCardName::WildCardName(Name format)
+        :Name(std::move(format))
+{}
+
+WildCardName::WildCardName(std::string str)
+        :Name(std::move(str))
+{}
+
+WildCardName::WildCardName(const char * str)
+        :Name(str)
+{}
+
+WildCardName::WildCardName(const Block& block)
+        :Name(block)
+{}
+
 bool
 WildCardName::match(const Name& name) const
 {
@@ -76,6 +93,10 @@ MultipartySchema::fromINFO(const std::string& fileOrConfigStr)
   boost::property_tree::info_parser::read_info(fileOrConfigStr, config);
   return fromSchemaSection(config);
 }
+
+MultipartySchema::MultipartySchema()
+        : minOptionalSigners(0)
+{}
 
 std::string
 MultipartySchema::toString()
@@ -123,7 +144,7 @@ MultipartySchema::getKeyMatches(const Name& key) const
 bool
 MultipartySchema::isSatisfied(const MpsSignerList& signers) const
 {
-  const auto& realSigners = signers.m_signers;
+  const auto& realSigners = signers;
   if (getMinSigners(realSigners).empty()) {
     return false;
   }
@@ -155,8 +176,8 @@ MultipartySchema::getMinSigners(const std::vector<Name>& availableKeys) const
     }
   }
   size_t count = 0;
-  for (const auto& requiredSigner : this->signers) {
-    auto result = findAMatch(requiredSigner, availableKeys);
+  for (const auto& optionalSigner : this->optionalSigners) {
+    auto result = findAMatch(optionalSigner, availableKeys);
     if (!result.empty()) {
       count++;
       resultSet.insert(result);

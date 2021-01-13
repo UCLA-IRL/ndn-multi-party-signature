@@ -17,14 +17,24 @@ namespace tests {
 
 BOOST_AUTO_TEST_SUITE(TestSchema)
 
-BOOST_AUTO_TEST_CASE(SchemaInfoFile)
+BOOST_AUTO_TEST_CASE(SchemaInfoJSON)
 {
-  auto schema = MultipartySchema::fromFile("tests/unit-tests/config-files/sample-schema.json");
+  auto schema = MultipartySchema::fromJSON("tests/unit-tests/config-files/sample-schema.json");
+  std::cout << schema.toString() << std::endl;
+  BOOST_CHECK_EQUAL(schema.prefix, "/example/data");
+  BOOST_CHECK_EQUAL(schema.ruleId, "rule1");
+  BOOST_CHECK_EQUAL(schema.minOptionalSigners, 2);
+  BOOST_CHECK_EQUAL(schema.signers.size(), 2);
+}
+
+BOOST_AUTO_TEST_CASE(SchemaInfoINFO)
+{
+  auto schema = MultipartySchema::fromINFO("tests/unit-tests/config-files/sample-schema.info");
   //std::cout << schema.toString() << std::endl;
   BOOST_CHECK_EQUAL(schema.prefix, "/example/data");
   BOOST_CHECK_EQUAL(schema.ruleId, "rule1");
-  //BOOST_CHECK_EQUAL(schema.minOptionalSigners, 2); //TODO fix
-  //BOOST_CHECK_EQUAL(schema.signers.size(), 2); //TODO fix
+  BOOST_CHECK_EQUAL(schema.minOptionalSigners, 2);
+  BOOST_CHECK_EQUAL(schema.signers.size(), 2);
 }
 
 BOOST_AUTO_TEST_SUITE_END()  // TestSchema

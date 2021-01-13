@@ -12,9 +12,7 @@
 
 namespace ndn {
 
-class MpsSignerList {
-public:
-  std::vector<Name> m_signers;
+class MpsSignerList: public std::vector<Name> {
 
 public:  // constructors
 
@@ -27,6 +25,7 @@ public:  // constructors
    *  \note Implicit conversion is permitted.
    *  \post `getType() == tlv::Name`
    */
+  MpsSignerList(std::vector<Name>&& signers);
   MpsSignerList(const std::vector<Name>& signers);
 
   /** \brief Construct from wire encoding.
@@ -39,6 +38,21 @@ public:
 
   void
   wireDecode(const Block& wire);
+
+public:
+  bool
+  operator==(const MpsSignerList& rhs) {
+    std::vector<Name> nameList(this->begin(), this->end());
+    std::vector<Name> rhsNameList(rhs.begin(), rhs.end());
+    std::sort(nameList.begin(), nameList.end());
+    std::sort(rhsNameList.begin(), rhsNameList.end());
+    return nameList == rhsNameList;
+  }
+
+  bool
+  operator!=(const MpsSignerList& rhs) {
+    return !operator==(rhs);
+  }
 };
 
 std::ostream&

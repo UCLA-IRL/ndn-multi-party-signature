@@ -13,7 +13,12 @@ namespace ndn {
 
 class WildCardName : public Name {
 public:
-  using Name::Name;
+
+  WildCardName() = default;
+  WildCardName(Name format);
+  WildCardName(std::string str);
+  WildCardName(const char * str);
+  WildCardName(const Block& block);
 
   bool
   match(const Name& name) const;
@@ -38,6 +43,8 @@ public:
   static MultipartySchema
   fromINFO(const std::string& fileOrConfigStr);
 
+  MultipartySchema();
+
   std::string
   toString();
 
@@ -51,8 +58,8 @@ public:
   getMinSigners(const std::vector<Name>& availableKeys) const;
 
 private:
-  static void
-  parseAssert(bool criterion);
+  // static void
+  // parseAssert(bool criterion);
 
   // static std::vector<std::pair<int, int>>
   // modifiedFordFulkerson(const std::vector<std::set<int>>& bipartiteAdjList,

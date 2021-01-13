@@ -20,7 +20,7 @@ BOOST_AUTO_TEST_SUITE(TestMpsSignerList)
 BOOST_AUTO_TEST_CASE(EmptyList)
 {
   MpsSignerList a;
-  BOOST_CHECK_EQUAL(a.m_signers.empty(), true);
+  BOOST_CHECK_EQUAL(a.empty(), true);
 
   Block wire = a.wireEncode();
   // These octets are obtained from the snippet below.
@@ -36,14 +36,13 @@ BOOST_AUTO_TEST_CASE(EmptyList)
 
   MpsSignerList b(wire);
   BOOST_CHECK_EQUAL(a, b);
-  BOOST_CHECK_EQUAL(a.m_signers.empty(), true);
+  BOOST_CHECK_EQUAL(a.empty(), true);
 }
 
 BOOST_AUTO_TEST_CASE(Encoding)
 {
-  std::set<Name> names;
-  names.emplace("/A");
-  MpsSignerList a(names);
+  MpsSignerList a;
+  a.emplace_back("/A");
 
   const Block& wire = a.wireEncode();
   // These octets are obtained from the snippet below.
@@ -60,22 +59,22 @@ BOOST_AUTO_TEST_CASE(Encoding)
 
   MpsSignerList b(wire);
   BOOST_CHECK_EQUAL(a, b);
-  BOOST_CHECK_EQUAL_COLLECTIONS(b.m_signers.begin(), b.m_signers.end(), names.begin(), names.end());
+
+  b = a;
+  BOOST_CHECK_EQUAL(a, b);
 }
 
 BOOST_AUTO_TEST_CASE(Encoding2)
 {
-  std::set<Name> names;
-  names.emplace("/A");
-  names.emplace("/b");
-  names.emplace("/C");
-  MpsSignerList a(names);
+  MpsSignerList a;
+  a.emplace_back("/A");
+  a.emplace_back("/b");
+  a.emplace_back("/C");
 
   const Block& wire = a.wireEncode();
 
   MpsSignerList b(wire);
   BOOST_CHECK_EQUAL(a, b);
-  BOOST_CHECK_EQUAL_COLLECTIONS(b.m_signers.begin(), b.m_signers.end(), names.begin(), names.end());
 }
 
 BOOST_AUTO_TEST_CASE(Equality)
@@ -85,16 +84,16 @@ BOOST_AUTO_TEST_CASE(Equality)
   BOOST_CHECK_EQUAL(a == b, true);
   BOOST_CHECK_EQUAL(a != b, false);
 
-  a.m_signers.emplace("/A");
+  a.emplace_back("/A");
   BOOST_CHECK_EQUAL(a == b, false);
   BOOST_CHECK_EQUAL(a != b, true);
 
-  b.m_signers.emplace("/B");
+  b.emplace_back("/B");
   BOOST_CHECK_EQUAL(a == b, false);
   BOOST_CHECK_EQUAL(a != b, true);
 
-  b.m_signers.emplace("/A");
-  a.m_signers.emplace("/B");
+  b.emplace_back("/A");
+  a.emplace_back("/B");
   BOOST_CHECK_EQUAL(a == b, true);
   BOOST_CHECK_EQUAL(a != b, false);
 }

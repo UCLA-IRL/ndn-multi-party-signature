@@ -1,6 +1,7 @@
 #ifndef NDNMPS_CRYPTO_PLAYERS_HPP
 #define NDNMPS_CRYPTO_PLAYERS_HPP
 
+#define BLS_ETH
 #include <bls/bls384_256.h>
 #include <iostream>
 #include <map>
@@ -31,20 +32,20 @@ public:
   /**
    * @brief Get identity name.
    */
-  Name
+  const Name&
   getSignerKeyName() const;
 
   /**
    * @brief Get public key.
    */
-  blsPublicKey
+  const blsPublicKey&
   getPublicKey() const;
 
   /**
    * @brief Get secret key.
    * @warning The secret key SHOULD NEVER be transmitted over unsecured network
    */
-  blsSecretKey
+  const blsSecretKey&
   getSecretKey() const;
 
   /**

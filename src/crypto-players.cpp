@@ -44,19 +44,19 @@ MpsSigner::MpsSigner(const Name& signerName, const Buffer& secretKeyBuf)
   blsGetPublicKey(&m_pk, &m_sk);
 }
 
-Name
+const Name&
 MpsSigner::getSignerKeyName() const
 {
   return m_signerName;
 }
 
-blsPublicKey
+const blsPublicKey&
 MpsSigner::getPublicKey() const
 {
   return m_pk;
 }
 
-blsSecretKey
+const blsSecretKey&
 MpsSigner::getSecretKey() const
 {
   return m_sk;
@@ -90,25 +90,12 @@ MpsSigner::getSignature(const Data& data) const
   if (!data.getSignatureInfo()) {
     return Block();
   }
-  const uint8_t* data_ptr;
-  size_t data_size;
+
   EncodingBuffer encoder;
-  auto signedRanges = data.extractSignedRanges();
-  if (signedRanges.size() == 1) {  // to avoid copying in current ndn-cxx impl
-    const auto& it = signedRanges.begin();
-    data_ptr = it->first;
-    data_size = it->second;
-  }
-  else {
-    for (const auto& it : signedRanges) {
-      encoder.appendByteArray(it.first, it.second);
-    }
-    data_ptr = encoder.buf();
-    data_size = encoder.size();
-  }
+  data.wireEncode(encoder, true);
 
   blsSignature sig;
-  blsSign(&sig, &m_sk, data_ptr, data_size);
+  blsSign(&sig, &m_sk, encoder.buf(), encoder.size());
   auto signatureBuf = make_shared<Buffer>(blsGetSerializedSignatureByteSize());
   auto written_size = blsSignatureSerialize(signatureBuf->data(), signatureBuf->size(), &sig);
   if (written_size == 0) {
@@ -179,7 +166,7 @@ MpsVerifier::readyToVerify(const Data& data) const
     if (m_signLists.count(sigInfo.getKeyLocator().getName()) == 0)
       return false;
     const auto& item = m_signLists.at(sigInfo.getKeyLocator().getName());
-    for (const auto& signers : item.m_signers) {
+    for (const auto& signers : item) {
       if (m_certs.count(signers) == 0)
         return false;
     }
@@ -203,7 +190,7 @@ MpsVerifier::itemsToFetch(const Data& data) const
       return ans;
     }
     const auto& item = m_signLists.at(sigInfo.getKeyLocator().getName());
-    for (const auto& signers : item.m_signers) {
+    for (const auto& signers : item) {
       if (m_certs.count(signers) == 0) {
         ans.emplace_back(sigInfo.getKeyLocator().getName());
       }
@@ -228,7 +215,7 @@ MpsVerifier::verifySignature(const Data& data, const MultipartySchema& schema) c
       }
     }
     else if (m_certs.count(sigInfo.getKeyLocator().getName()) != 0) {
-      locator.m_signers.emplace_back(sigInfo.getKeyLocator().getName());
+      locator.emplace_back(sigInfo.getKeyLocator().getName());
       aggKey = m_certs.at(sigInfo.getKeyLocator().getName());
       aggKeyInitialized = true;
     }
@@ -241,7 +228,7 @@ MpsVerifier::verifySignature(const Data& data, const MultipartySchema& schema) c
 
   //build public key if needed
   if (!aggKeyInitialized) {
-    for (const auto& signer : locator.m_signers) {
+    for (const auto& signer : locator) {
       auto it = m_certs.find(signer);
       if (it == m_certs.end())
         return false;
@@ -306,18 +293,10 @@ MpsVerifier::verifySignaturePiece(const Data& dataWithInfo, const Name& signedBy
   if (blsSignatureDeserialize(&sig, signaturePiece.value(), signaturePiece.value_size()) == 0)
     return false;
 
-  auto signedRanges = dataWithInfo.extractSignedRanges();
-  if (signedRanges.size() == 1) {  // to avoid copying in current ndn-cxx impl
-    const auto& it = signedRanges.begin();
-    return blsVerify(&sig, &publicKey, it->first, it->second);
-  }
-  else {
+
     EncodingBuffer encoder;
-    for (const auto& it : signedRanges) {
-      encoder.appendByteArray(it.first, it.second);
-    }
+    dataWithInfo.wireEncode(encoder, true);
     return blsVerify(&sig, &publicKey, encoder.buf(), encoder.size());
-  }
 }
 
 MpsAggregater::MpsAggregater()
@@ -353,7 +332,7 @@ MpsAggregater::buildMultiSignature(Data& dataWithInfo, const std::vector<blsSign
 
   Block sigValue(tlv::SignatureValue, sigBuffer);
 
-  dataWithInfo.wireEncode(encoder, sigValue);
+  dataWithInfo.setSignatureValue(sigValue.getBuffer());
 }
 
 }  // namespace ndn
