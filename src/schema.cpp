@@ -1,10 +1,52 @@
 #include "ndnmps/schema.hpp"
-
 #include <fstream>
-#include <set>
 #include <sstream>
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/info_parser.hpp>
+#include <boost/property_tree/json_parser.hpp>
 
 namespace ndn {
+
+typedef boost::property_tree::ptree SchemaSection;
+
+const static std::string CONFIG_DATA_NAME = "data-name";
+const static std::string CONFIG_RULE_ID = "rule-id";
+const static std::string CONFIG_ALL_OF = "all-of";
+const static std::string CONFIG_AT_LEAST_NUM = "at-least-num";
+const static std::string CONFIG_AT_LEAST = "at-least";
+
+void
+parseAssert(bool criterion)
+{
+  if (!criterion) {
+    NDN_THROW(std::runtime_error("Invalid schema format"));
+  }
+}
+
+MultipartySchema
+fromSchemaSection(const SchemaSection& config)
+{
+  MultipartySchema schema;
+  parseAssert(config.begin() != config.end() &&
+              config.get(CONFIG_DATA_NAME, "") != "" &&
+              config.get(CONFIG_RULE_ID, "") != "");
+  schema.prefix = WildCardName(config.get(CONFIG_DATA_NAME, ""));
+  schema.ruleId = config.get(CONFIG_RULE_ID, "");
+  schema.minOptionalSigners = config.get(CONFIG_AT_LEAST_NUM, 0);
+  auto allOfSection = config.get_child_optional(CONFIG_ALL_OF);
+  if (allOfSection != boost::none) {
+    for (auto it = allOfSection->begin(); it != allOfSection->end(); it++) {
+      schema.signers.emplace_back(it->second.data());
+    }
+  }
+  auto atLeastSection = config.get_child_optional(CONFIG_AT_LEAST);
+  if (atLeastSection != boost::none) {
+    for (auto it = atLeastSection->begin(); it != atLeastSection->end(); it++) {
+      schema.optionalSigners.emplace_back(it->second.data());
+    }
+  }
+  return schema;
+}
 
 bool
 WildCardName::match(const Name& name) const
@@ -20,87 +62,45 @@ WildCardName::match(const Name& name) const
 }
 
 MultipartySchema
-MultipartySchema::fromFile(const std::string& configFile)
+MultipartySchema::fromJSON(const std::string& fileOrConfigStr)
 {
-  MultipartySchema schema;
-  std::ifstream config(configFile);
-  std::stringstream buffer;
-  buffer << config.rdbuf();
-  return MultipartySchema::fromString(buffer.str());
+  SchemaSection config;
+  boost::property_tree::json_parser::read_json(fileOrConfigStr, config);
+  return fromSchemaSection(config);
 }
 
 MultipartySchema
-MultipartySchema::fromString(const std::string& configStr)
+MultipartySchema::fromINFO(const std::string& fileOrConfigStr)
 {
-  MultipartySchema schema;
-  Json content = Json::parse(configStr);
-  parseAssert(content.is_object() &&
-              content.find("prefix") != content.end() && content.at("prefix").is_string() &&
-              content.find("rule-id") != content.end() && content.at("rule-id").is_string() &&
-              content.find("signed-by") != content.end());
-  schema.prefix = content.find("prefix")->get<std::string>();
-  schema.ruleId = content.find("rule-id")->get<std::string>();
-  Json signedBy = *content.find("signed-by");
-
-  parseAssert(signedBy.is_object());
-  if (signedBy.find("all-of") != signedBy.end()) {
-    parseAssert(signedBy.at("all-of").is_object());
-    for (auto& party : signedBy.at("all-of").items()) {
-      parseAssert(party.key() == "key-format" && party.value().is_string());
-      schema.signers.emplace_back(party.value().get<std::string>());
-    }
-  }
-  if (signedBy.find("at-least") != signedBy.end()) {
-    parseAssert(signedBy.at("at-least").is_object());
-    for (auto& party : signedBy.at("at-least").items()) {
-      if (party.key() == "num" && party.value().is_number_unsigned()) {
-        schema.minOptionalSigners = party.value().get<size_t>();
-      }
-      else {
-        parseAssert(party.key() == "key-format" && party.value().is_string());
-        schema.optionalSigners.emplace_back(party.value().get<std::string>());
-      }
-    }
-  }
-  else {
-    schema.minOptionalSigners = 0;
-  }
-  return schema;
+  SchemaSection config;
+  boost::property_tree::info_parser::read_info(fileOrConfigStr, config);
+  return fromSchemaSection(config);
 }
 
 std::string
 MultipartySchema::toString()
 {
   Json content;
-  content["prefix"] = prefix.toUri();
-  content["rule-id"] = ruleId;
-  content["signed-by"] = Json::object();
-
-  if (!signers.empty()) {
-    auto signers_object = Json::object();
-    for (const auto& signer : signers) {
-      signers_object.emplace(std::string("key-format"), signer.toUri());
-    }
-    content["signed-by"]["all-of"] = signers_object;
+  content[CONFIG_DATA_NAME] = this->prefix.toUri();
+  content[CONFIG_RULE_ID] = this->ruleId;
+  if (this->minOptionalSigners > 0) {
+    content[CONFIG_AT_LEAST_NUM] = this->minOptionalSigners;
   }
-
-  if (!optionalSigners.empty() || minOptionalSigners != 0) {
-    auto signers_object = Json::object();
-    signers_object["num"] = minOptionalSigners;
-    for (const auto& signer : optionalSigners) {
-      signers_object.emplace(std::string("key-format"), signer.toUri());
+  if (!signers.empty()) {
+    std::vector<std::string> signersVec;
+    for (const auto& signer : this->signers) {
+      signersVec.push_back(signer.toUri());
     }
-    content["signed-by"]["at-least"] = signers_object;
+    content[CONFIG_ALL_OF] = signersVec;
+  }
+  if (!optionalSigners.empty()) {
+    std::vector<std::string> optionalSignersVec;
+    for (const auto& signer : this->optionalSigners) {
+      optionalSignersVec.push_back(signer.toUri());
+    }
+    content[CONFIG_AT_LEAST] = optionalSignersVec;
   }
   return content.dump();
-}
-
-void
-MultipartySchema::parseAssert(bool criterion)
-{
-  if (!criterion) {
-    NDN_THROW(std::runtime_error("Invalid JSON type"));
-  }
 }
 
 std::vector<Name>

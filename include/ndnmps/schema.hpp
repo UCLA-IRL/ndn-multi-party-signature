@@ -1,11 +1,10 @@
 #ifndef NDNMPS_SCHEMA_HPP
 #define NDNMPS_SCHEMA_HPP
 
-#include <list>
 #include <ndn-cxx/name.hpp>
 #include <nlohmann/json.hpp>
 #include <set>
-
+#include <list>
 #include "mps-signer-list.hpp"
 
 using Json = nlohmann::json;
@@ -21,26 +20,23 @@ public:
 };
 
 /**
- * @brief JSON based configuration file to guide signing and verification.
+ * @brief configuration file to guide signing and verification.
  * TODO can be let a schema refer to other schema? we can make much more complex rules from it.
  */
 class MultipartySchema {
 public:
-  Name prefix;
-  std::string ruleId;
-  std::vector<WildCardName> signers;
-  size_t minOptionalSigners;
-  std::vector<WildCardName> optionalSigners;
+  WildCardName prefix; // Data name
+  std::string ruleId; // rule ID
+  std::vector<WildCardName> signers; // required signers
+  std::vector<WildCardName> optionalSigners; // optional signers
+  size_t minOptionalSigners; // min required optional signers
 
 public:
   static MultipartySchema
-  fromFile(const std::string& configFile);
+  fromJSON(const std::string& fileOrConfigStr);
 
   static MultipartySchema
-  fromString(const std::string& configStr);
-
-  static MultipartySchema
-  fromTlv(const Block& configBlock);
+  fromINFO(const std::string& fileOrConfigStr);
 
   std::string
   toString();

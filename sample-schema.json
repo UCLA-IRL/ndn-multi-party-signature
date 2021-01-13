@@ -1,16 +1,14 @@
 {
-  "prefix":"/example/data",
-  "rule-id":"rule1",
-  "signed-by": {
-    "all-of": {
-      "key-format": "/example/a/KEY/_/_",
-      "key-format": "/example/b/KEY/_/_"
-    },
-    "at-least": {
-      "num": 2,
-      "key-format": "/example/c/KEY/_/_",
-      "key-format": "/example/d/KEY/_/_",
-      "key-format": "/example/e/KEY/_/_"
-    }
-  }
+  "data-name": "/example/data",
+  "rule-id": "rule1",
+  "all-of": [
+    "/example/a/KEY/_/_",
+    "/example/b/KEY/_/_"
+  ],
+  "at-least-num": 2,
+  "at-least": [
+    "/example/c/KEY/_/_",
+    "/example/d/KEY/_/_",
+    "/example/e/KEY/_/_"
+  ]
 }
