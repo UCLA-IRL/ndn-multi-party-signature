@@ -179,7 +179,7 @@ MpsVerifier::readyToVerify(const Data& data) const
     if (m_signLists.count(sigInfo.getKeyLocator().getName()) == 0)
       return false;
     const auto& item = m_signLists.at(sigInfo.getKeyLocator().getName());
-    for (const auto& signers : item.getSigners()) {
+    for (const auto& signers : item.m_signers) {
       if (m_certs.count(signers) == 0)
         return false;
     }
@@ -203,7 +203,7 @@ MpsVerifier::itemsToFetch(const Data& data) const
       return ans;
     }
     const auto& item = m_signLists.at(sigInfo.getKeyLocator().getName());
-    for (const auto& signers : item.getSigners()) {
+    for (const auto& signers : item.m_signers) {
       if (m_certs.count(signers) == 0) {
         ans.emplace_back(sigInfo.getKeyLocator().getName());
       }
@@ -228,7 +228,7 @@ MpsVerifier::verifySignature(const Data& data, const MultipartySchema& schema) c
       }
     }
     else if (m_certs.count(sigInfo.getKeyLocator().getName()) != 0) {
-      locator.getSigners().emplace(sigInfo.getKeyLocator().getName());
+      locator.m_signers.emplace_back(sigInfo.getKeyLocator().getName());
       aggKey = m_certs.at(sigInfo.getKeyLocator().getName());
       aggKeyInitialized = true;
     }
@@ -236,12 +236,12 @@ MpsVerifier::verifySignature(const Data& data, const MultipartySchema& schema) c
       return false;
     }
   }
-  if (!schema.verifyKeyLocator(locator))
+  if (!schema.isSatisfied(locator))
     return false;
 
   //build public key if needed
   if (!aggKeyInitialized) {
-    for (const auto& signer : locator.getSigners()) {
+    for (const auto& signer : locator.m_signers) {
       auto it = m_certs.find(signer);
       if (it == m_certs.end())
         return false;

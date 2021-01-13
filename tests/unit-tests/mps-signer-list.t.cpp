@@ -20,7 +20,7 @@ BOOST_AUTO_TEST_SUITE(TestMpsSignerList)
 BOOST_AUTO_TEST_CASE(EmptyList)
 {
   MpsSignerList a;
-  BOOST_CHECK_EQUAL(a.getSigners().empty(), true);
+  BOOST_CHECK_EQUAL(a.m_signers.empty(), true);
 
   Block wire = a.wireEncode();
   // These octets are obtained from the snippet below.
@@ -36,7 +36,7 @@ BOOST_AUTO_TEST_CASE(EmptyList)
 
   MpsSignerList b(wire);
   BOOST_CHECK_EQUAL(a, b);
-  BOOST_CHECK_EQUAL(a.getSigners().empty(), true);
+  BOOST_CHECK_EQUAL(a.m_signers.empty(), true);
 }
 
 BOOST_AUTO_TEST_CASE(Encoding)
@@ -60,7 +60,7 @@ BOOST_AUTO_TEST_CASE(Encoding)
 
   MpsSignerList b(wire);
   BOOST_CHECK_EQUAL(a, b);
-  BOOST_CHECK_EQUAL_COLLECTIONS(b.getSigners().begin(), b.getSigners().end(), names.begin(), names.end());
+  BOOST_CHECK_EQUAL_COLLECTIONS(b.m_signers.begin(), b.m_signers.end(), names.begin(), names.end());
 }
 
 BOOST_AUTO_TEST_CASE(Encoding2)
@@ -75,7 +75,7 @@ BOOST_AUTO_TEST_CASE(Encoding2)
 
   MpsSignerList b(wire);
   BOOST_CHECK_EQUAL(a, b);
-  BOOST_CHECK_EQUAL_COLLECTIONS(b.getSigners().begin(), b.getSigners().end(), names.begin(), names.end());
+  BOOST_CHECK_EQUAL_COLLECTIONS(b.m_signers.begin(), b.m_signers.end(), names.begin(), names.end());
 }
 
 BOOST_AUTO_TEST_CASE(Equality)
@@ -85,16 +85,16 @@ BOOST_AUTO_TEST_CASE(Equality)
   BOOST_CHECK_EQUAL(a == b, true);
   BOOST_CHECK_EQUAL(a != b, false);
 
-  a.getSigners().emplace("/A");
+  a.m_signers.emplace("/A");
   BOOST_CHECK_EQUAL(a == b, false);
   BOOST_CHECK_EQUAL(a != b, true);
 
-  b.getSigners().emplace("/B");
+  b.m_signers.emplace("/B");
   BOOST_CHECK_EQUAL(a == b, false);
   BOOST_CHECK_EQUAL(a != b, true);
 
-  b.getSigners().emplace("/A");
-  a.getSigners().emplace("/B");
+  b.m_signers.emplace("/A");
+  a.m_signers.emplace("/B");
   BOOST_CHECK_EQUAL(a == b, true);
   BOOST_CHECK_EQUAL(a != b, false);
 }

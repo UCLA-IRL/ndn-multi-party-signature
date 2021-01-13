@@ -121,38 +121,51 @@ MultipartySchema::getKeyMatches(const Name& key) const
 }
 
 bool
-MultipartySchema::verifyKeyLocator(const MpsSignerList& locator) const
+MultipartySchema::isSatisfied(const MpsSignerList& signers) const
 {
-  const auto& realSigners = locator.getSigners();
-  for (const auto& requiredSigner : this->signers) {
-    bool matched = false;
-    for (const auto& realSigner : realSigners) {
-      if (requiredSigner.match(realSigner)) {
-        matched = true;
-        break;
-      }
+  const auto& realSigners = signers.m_signers;
+  if (getMinSigners(realSigners).empty()) {
+    return false;
+  }
+  return true;
+}
+
+Name
+findAMatch(const WildCardName& target, const std::vector<Name>& collection)
+{
+  for (const auto& item : collection) {
+    if (target.match(item)) {
+      return item;
     }
-    if (!matched) {
-      return false;
+  }
+  return Name();
+}
+
+std::set<Name>
+MultipartySchema::getMinSigners(const std::vector<Name>& availableKeys) const
+{
+  std::set<Name> resultSet;
+  for (const auto& requiredSigner : this->signers) {
+    auto result = findAMatch(requiredSigner, availableKeys);
+    if (result.empty()) {
+      return std::set<Name>();
+    }
+    else {
+      resultSet.insert(result);
     }
   }
   size_t count = 0;
   for (const auto& requiredSigner : this->signers) {
-    bool matched = false;
-    for (const auto& realSigner : realSigners) {
-      if (requiredSigner.match(realSigner)) {
-        matched = true;
-        break;
-      }
-    }
-    if (matched) {
+    auto result = findAMatch(requiredSigner, availableKeys);
+    if (!result.empty()) {
       count++;
+      resultSet.insert(result);
     }
   }
   if (count < this->minOptionalSigners) {
-    return false;
+    return std::set<Name>();
   }
-  return true;
+  return resultSet;
 }
 
 // bool
@@ -160,7 +173,7 @@ MultipartySchema::verifyKeyLocator(const MpsSignerList& locator) const
 // {
 //   std::vector<Name> keys;
 //   std::vector<std::set<int>> matches;
-//   for (const auto& signer : locator.getSigners()) {
+//   for (const auto& signer : locator.m_signers) {
 //     // no repeated keys
 //     if (std::find(keys.begin(), keys.end(), signer) != keys.end())
 //       continue;
@@ -183,120 +196,115 @@ MultipartySchema::verifyKeyLocator(const MpsSignerList& locator) const
 //   return out.size() >= signers.size() + minOptionalSigners;
 // }
 
-optional<std::vector<Name>>
-MultipartySchema::getMinSigners(const std::vector<Name>& availableKeys) const
-{
-  std::vector<std::set<int>> matches;
-  for (int keyId = 0; keyId < availableKeys.size(); keyId++) {
-    for (int i = 0; i < signers.size(); i++) {
-      if (signers.at(i).match(availableKeys[i])) {
-        matches[i].emplace(keyId);
-      }
-    }
-    for (int i = 0; i < optionalSigners.size(); i++) {
-      if (optionalSigners.at(i).match(availableKeys[i])) {
-        matches[i + signers.size()].emplace(keyId);
-      }
-    }
-  }
+// std::vector<Name>
+// MultipartySchema::getMinSigners(const std::vector<Name>& availableKeys) const
+// {
+//   std::vector<std::set<int>> matches;
+//   for (int keyId = 0; keyId < availableKeys.size(); keyId++) {
+//     for (int i = 0; i < signers.size(); i++) {
+//       if (signers.at(i).match(availableKeys[i])) {
+//         matches[i].emplace(keyId);
+//       }
+//     }
+//     for (int i = 0; i < optionalSigners.size(); i++) {
+//       if (optionalSigners.at(i).match(availableKeys[i])) {
+//         matches[i + signers.size()].emplace(keyId);
+//       }
+//     }
+//   }
 
-  //find matches by maximum flow
-  std::vector<std::pair<int, int>> out = modifiedFordFulkerson(matches, signers.size(), optionalSigners.size());
+//   //find matches by maximum flow
+//   std::vector<std::pair<int, int>> out = modifiedFordFulkerson(matches, signers.size(), optionalSigners.size());
 
-  //translate back and filter to necessary only
-  std::vector<Name> ans;
-  int mustHaveCount = 0;
-  int optionalCount = 0;
-  for (auto item : out) {
-    if (item.first < signers.size()) {  // must have
-      mustHaveCount++;
-      ans.emplace_back(availableKeys[item.second]);
-    }
-    else if (optionalCount < minOptionalSigners) {
-      optionalCount++;
-      ans.emplace_back(availableKeys[item.second]);
-    }
-  }
-  if (mustHaveCount == signers.size() && optionalCount >= minOptionalSigners) {
-    return std::move(ans);
-  }
-  else {
-    return nullopt;
-  }
-}
+//   //translate back and filter to necessary only
+//   std::vector<Name> ans;
+//   int mustHaveCount = 0;
+//   int optionalCount = 0;
+//   for (auto item : out) {
+//     if (item.first < signers.size()) {  // must have
+//       mustHaveCount++;
+//       ans.emplace_back(availableKeys[item.second]);
+//     }
+//     else if (optionalCount < minOptionalSigners) {
+//       optionalCount++;
+//       ans.emplace_back(availableKeys[item.second]);
+//     }
+//   }
+//   return ans;
+// }
 
-std::vector<std::pair<int, int>>
-MultipartySchema::modifiedFordFulkerson(const std::vector<std::set<int>>& bipartiteAdjList, int mustHaveSize, int optionalSize)
-{
-  //node assignment: 0 as source, 1 as sink, 2 to mustHaveSize + optionalSize + 1 as position, rest as keys node.
-  //convert the bipartite Adjency list to flow graph
-  std::map<int, std::set<int>> adjList;
-  //position
-  for (int i = 2; i < mustHaveSize + optionalSize + 2; i++) {
-    adjList[0].emplace(i);
-  }
-  //possible assignments
-  for (int i = 0; i < bipartiteAdjList.size(); i++) {
-    for (auto val : bipartiteAdjList.at(i)) {
-      adjList[i + 2].emplace(val + mustHaveSize + optionalSize + 2);
-      adjList[val + mustHaveSize + optionalSize + 2].emplace(1);
-    }
-  }
+// std::vector<std::pair<int, int>>
+// MultipartySchema::modifiedFordFulkerson(const std::vector<std::set<int>>& bipartiteAdjList, int mustHaveSize, int optionalSize)
+// {
+//   //node assignment: 0 as source, 1 as sink, 2 to mustHaveSize + optionalSize + 1 as position, rest as keys node.
+//   //convert the bipartite Adjency list to flow graph
+//   std::map<int, std::set<int>> adjList;
+//   //position
+//   for (int i = 2; i < mustHaveSize + optionalSize + 2; i++) {
+//     adjList[0].emplace(i);
+//   }
+//   //possible assignments
+//   for (int i = 0; i < bipartiteAdjList.size(); i++) {
+//     for (auto val : bipartiteAdjList.at(i)) {
+//       adjList[i + 2].emplace(val + mustHaveSize + optionalSize + 2);
+//       adjList[val + mustHaveSize + optionalSize + 2].emplace(1);
+//     }
+//   }
 
-  //find augment path
-  std::list<int> augmentPath;
-  while (fordFulkersonDFS(adjList, 0, 1, augmentPath)) {  // more augment path
-    for (auto it = augmentPath.begin(); it != augmentPath.end(); it++) {
-      auto it2 = it;
-      it2++;
-      if (it2 == augmentPath.end())
-        break;
+//   //find augment path
+//   std::list<int> augmentPath;
+//   while (fordFulkersonDFS(adjList, 0, 1, augmentPath)) {  // more augment path
+//     for (auto it = augmentPath.begin(); it != augmentPath.end(); it++) {
+//       auto it2 = it;
+//       it2++;
+//       if (it2 == augmentPath.end())
+//         break;
 
-      adjList[*it].erase(*it2);
-      if (!(*it == 0 && *it2 >= 2 && *it2 < 2 + mustHaveSize))  // only add reverse link if not a mustHave node
-        adjList[*it2].emplace(*it);
-    }
-    augmentPath.clear();
-  }
+//       adjList[*it].erase(*it2);
+//       if (!(*it == 0 && *it2 >= 2 && *it2 < 2 + mustHaveSize))  // only add reverse link if not a mustHave node
+//         adjList[*it2].emplace(*it);
+//     }
+//     augmentPath.clear();
+//   }
 
-  //check mustHave met
-  for (auto item : adjList[0]) {
-    if (item < 2 + mustHaveSize)
-      return std::vector<std::pair<int, int>>();
-  }
+//   //check mustHave met
+//   for (auto item : adjList[0]) {
+//     if (item < 2 + mustHaveSize)
+//       return std::vector<std::pair<int, int>>();
+//   }
 
-  //return
-  std::vector<std::pair<int, int>> ans;
-  for (auto keyNode : adjList[1]) {
-    assert(adjList[keyNode].size() == 1);
-    auto positionId = *adjList[keyNode].begin();
-    ans.emplace_back(positionId - 2, keyNode - mustHaveSize - optionalSize - 2);
-  }
+//   //return
+//   std::vector<std::pair<int, int>> ans;
+//   for (auto keyNode : adjList[1]) {
+//     assert(adjList[keyNode].size() == 1);
+//     auto positionId = *adjList[keyNode].begin();
+//     ans.emplace_back(positionId - 2, keyNode - mustHaveSize - optionalSize - 2);
+//   }
 
-  return ans;
-}
+//   return ans;
+// }
 
-bool
-MultipartySchema::fordFulkersonDFS(const std::map<int, std::set<int>>& adjList, int start, int end, std::list<int>& path)
-{
-  path.emplace_back(start);
-  if (start == end)
-    return true;
-  for (auto item : adjList.at(start)) {
-    bool visited = false;
-    for (auto pastItem : path) {
-      if (item == pastItem) {
-        visited = true;
-        break;
-      }
-    }
-    if (visited)
-      continue;  // prevent loop
-    if (fordFulkersonDFS(adjList, item, end, path))
-      return true;
-  }
-  path.pop_back();
-  return false;
-}
+// bool
+// MultipartySchema::fordFulkersonDFS(const std::map<int, std::set<int>>& adjList, int start, int end, std::list<int>& path)
+// {
+//   path.emplace_back(start);
+//   if (start == end)
+//     return true;
+//   for (auto item : adjList.at(start)) {
+//     bool visited = false;
+//     for (auto pastItem : path) {
+//       if (item == pastItem) {
+//         visited = true;
+//         break;
+//       }
+//     }
+//     if (visited)
+//       continue;  // prevent loop
+//     if (fordFulkersonDFS(adjList, item, end, path))
+//       return true;
+//   }
+//   path.pop_back();
+//   return false;
+// }
 
 }  // namespace ndn

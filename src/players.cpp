@@ -446,7 +446,7 @@ Initiator::multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> 
     }
   }
   if (keyToCheck.size() < schema.minOptionalSigners + schema.signers.size() ||
-      !schema.getMinSigners(keyToCheck).has_value()) {
+      schema.getMinSigners(keyToCheck).empty()) {
     NDN_LOG_WARN("Not enough available signers to satisfy schema");
     if (failureCb)
       failureCb("Not enough available signers to satisfy schema");
@@ -587,7 +587,7 @@ Initiator::onData(uint32_t id, const Name& keyName, const Interest&, const Data&
       for (const auto &i : record.signaturePieces) {
         successPiece.emplace_back(i.first);
       }
-      if (record.schema.getMinSigners(successPiece).has_value()) {
+      if (!record.schema.getMinSigners(successPiece).empty()) {
         //success
         successCleanup(id);
       }
@@ -626,7 +626,7 @@ Initiator::onSignTimeout(uint32_t id)
   for (const auto& i : record.signaturePieces) {
     successPiece.emplace_back(i.first);
   }
-  if (record.schema.getMinSigners(successPiece).has_value()) {
+  if (!record.schema.getMinSigners(successPiece).empty()) {
     //success
     successCleanup(id);
   }
@@ -648,17 +648,17 @@ Initiator::successCleanup(uint32_t id)
     return;
   const auto& record = m_records.at(id);
 
-  std::set<Name> successPiece;
+  std::vector<Name> successPiece;
   std::vector<blsSignature> pieces(record.signaturePieces.size());
   for (const auto& i : record.signaturePieces) {
-    successPiece.emplace(i.first);
-    pieces.emplace_back(i.second);
+    successPiece.push_back(i.first);
+    pieces.push_back(i.second);
   }
 
   MpsSignerList signerList(successPiece);
   Data signerListData;
   signerListData.setName(record.unsignedData->getSignatureInfo().getKeyLocator().getName());
-  signerListData.setContent(makeNestedBlock(tlv::Content, signerList));
+  signerListData.setContent(signerList.wireEncode());
   //TODO sign?
 
   buildMultiSignature(*record.unsignedData, pieces);

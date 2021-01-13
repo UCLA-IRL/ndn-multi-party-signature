@@ -14,7 +14,7 @@ MultiPartySignature::~MultiPartySignature()
 }
 
 SignatureInfo
-MultiPartySignature::getMultiPartySignatureInfo(const std::set<Name>& keys)
+MultiPartySignature::getMultiPartySignatureInfo(const std::vector<Name>& keys)
 {
   MpsSignerList locator(keys);
   SignatureInfo info(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls));

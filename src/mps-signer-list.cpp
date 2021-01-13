@@ -3,103 +3,52 @@
 //
 
 #include "ndnmps/mps-signer-list.hpp"
-
 #include <utility>
 
 namespace ndn {
-MpsSignerList::MpsSignerList()
-    : m_locators()
-{
-}
 
-MpsSignerList::MpsSignerList(std::set<Name> signers)
-    : m_locators(std::move(signers))
+MpsSignerList::MpsSignerList(const std::vector<Name>& signers)
+    : m_signers(signers)
 {
 }
 
 MpsSignerList::MpsSignerList(const Block& wire)
-    : m_locators()
+    : m_signers()
 {
   wireDecode(wire);
 }
 
-template <encoding::Tag TAG>
-size_t
-MpsSignerList::wireEncode(EncodingImpl<TAG>& encoder) const
-{
-  // MultiPartySignerList = MULTI-PARTY-KEY-LOCATOR-TYPE TLV-LENGTH *KeyLocator
-
-  size_t totalLength = 0;
-
-  for (const auto& s : m_locators) {
-    totalLength += s.wireEncode(encoder);
-  }
-
-  totalLength += encoder.prependVarNumber(totalLength);
-  totalLength += encoder.prependVarNumber(tlv::MpsSignerList);
-  return totalLength;
-}
-
-NDN_CXX_DEFINE_WIRE_ENCODE_INSTANTIATIONS(MpsSignerList);
-
-const Block&
+Block
 MpsSignerList::wireEncode() const
 {
-  if (m_wire.hasWire())
-    return m_wire;
-
-  EncodingEstimator estimator;
-  size_t estimatedSize = wireEncode(estimator);
-
-  EncodingBuffer buffer(estimatedSize, 0);
-  wireEncode(buffer);
-
-  m_wire = buffer.block();
-  return m_wire;
+  auto wire = Block(tlv::MpsSignerList);
+  for (const auto& item : m_signers) {
+    wire.push_back(item.wireEncode());
+  }
+  wire.encode();
+  return wire;
 }
 
 void
 MpsSignerList::wireDecode(const Block& wire)
 {
   if (wire.type() != tlv::MpsSignerList)
-    NDN_THROW(Error("MultiPartySignerList", wire.type()));
-
-  m_locators.clear();
-  m_wire = wire;
-  m_wire.parse();
-
-  for (const auto& e : m_wire.elements()) {
-    m_locators.emplace(e);
+    NDN_THROW(tlv::Error("MultiPartySignerList", wire.type()));
+  m_signers.clear();
+  wire.parse();
+  for (const auto& item : wire.elements()) {
+    m_signers.emplace_back(item);
   }
-}
-
-const std::set<Name>&
-MpsSignerList::getSigners() const
-{
-  return m_locators;
-}
-
-void
-MpsSignerList::setSigners(const std::set<Name>& locators)
-{
-  m_locators = locators;
-  m_wire.reset();
-}
-
-std::set<Name>&
-MpsSignerList::getSigners()
-{
-  m_wire.reset();
-  return m_locators;
 }
 
 std::ostream&
 operator<<(std::ostream& os, const MpsSignerList& signerList)
 {
   os << "MpsSignerList [ ";
-  for (const auto& i : signerList.getSigners()) {
+  for (const auto& i : signerList.m_signers) {
     os << i << ", ";
   }
   return os << "]";
 }
+
 }  // namespace ndn

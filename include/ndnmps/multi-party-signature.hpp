@@ -14,7 +14,7 @@ public:
 
 public:
   static SignatureInfo
-  getMultiPartySignatureInfo(const std::set<Name>& keys);
+  getMultiPartySignatureInfo(const std::vector<Name>& keys);
 };
 
 }  // namespace ndn
