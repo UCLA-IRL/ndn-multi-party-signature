@@ -123,30 +123,65 @@ MultipartySchema::getKeyMatches(const Name& key) const
 bool
 MultipartySchema::verifyKeyLocator(const MpsSignerList& locator) const
 {
-  std::vector<Name> keys;
-  std::vector<std::set<int>> matches;
-  for (const auto& signer : locator.getSigners()) {
-    // no repeated keys
-    if (std::find(keys.begin(), keys.end(), signer) != keys.end())
-      continue;
-    keys.emplace_back(signer);
-    for (int i = 0; i < signers.size(); i++) {
-      if (signers.at(i).match(signer)) {
-        matches[i].emplace(keys.size() - 1);
+  const auto& realSigners = locator.getSigners();
+  for (const auto& requiredSigner : this->signers) {
+    bool matched = false;
+    for (const auto& realSigner : realSigners) {
+      if (requiredSigner.match(realSigner)) {
+        matched = true;
+        break;
       }
     }
-    for (int i = 0; i < optionalSigners.size(); i++) {
-      if (optionalSigners.at(i).match(signer)) {
-        matches[i + signers.size()].emplace(keys.size() - 1);
-      }
+    if (!matched) {
+      return false;
     }
   }
-
-  //find matches by maximum flow
-  std::vector<std::pair<int, int>> out = modifiedFordFulkerson(matches, signers.size(), optionalSigners.size());
-
-  return out.size() >= signers.size() + minOptionalSigners;
+  size_t count = 0;
+  for (const auto& requiredSigner : this->signers) {
+    bool matched = false;
+    for (const auto& realSigner : realSigners) {
+      if (requiredSigner.match(realSigner)) {
+        matched = true;
+        break;
+      }
+    }
+    if (matched) {
+      count++;
+    }
+  }
+  if (count < this->minOptionalSigners) {
+    return false;
+  }
+  return true;
 }
+
+// bool
+// MultipartySchema::verifyKeyLocator(const MpsSignerList& locator) const
+// {
+//   std::vector<Name> keys;
+//   std::vector<std::set<int>> matches;
+//   for (const auto& signer : locator.getSigners()) {
+//     // no repeated keys
+//     if (std::find(keys.begin(), keys.end(), signer) != keys.end())
+//       continue;
+//     keys.emplace_back(signer);
+//     for (int i = 0; i < signers.size(); i++) {
+//       if (signers.at(i).match(signer)) {
+//         matches[i].emplace(keys.size() - 1);
+//       }
+//     }
+//     for (int i = 0; i < optionalSigners.size(); i++) {
+//       if (optionalSigners.at(i).match(signer)) {
+//         matches[i + signers.size()].emplace(keys.size() - 1);
+//       }
+//     }
+//   }
+
+//   //find matches by maximum flow
+//   std::vector<std::pair<int, int>> out = modifiedFordFulkerson(matches, signers.size(), optionalSigners.size());
+
+//   return out.size() >= signers.size() + minOptionalSigners;
+// }
 
 optional<std::vector<Name>>
 MultipartySchema::getMinSigners(const std::vector<Name>& availableKeys) const
