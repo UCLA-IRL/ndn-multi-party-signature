@@ -4,7 +4,6 @@
 #include <utility>
 
 #include "ndnmps/common.hpp"
-#include "ndnmps/multi-party-signature.hpp"
 
 namespace ndn {
 
