@@ -49,12 +49,12 @@ fromSchemaSection(const SchemaSection& config)
   return schema;
 }
 
-WildCardName::WildCardName(Name format)
-        :Name(std::move(format))
+WildCardName::WildCardName(const Name& format)
+        :Name(format)
 {}
 
-WildCardName::WildCardName(std::string str)
-        :Name(std::move(str))
+WildCardName::WildCardName(const std::string& str)
+        :Name(str)
 {}
 
 WildCardName::WildCardName(const char * str)

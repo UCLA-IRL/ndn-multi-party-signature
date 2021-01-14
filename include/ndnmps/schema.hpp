@@ -15,8 +15,8 @@ class WildCardName : public Name {
 public:
 
   WildCardName() = default;
-  WildCardName(Name format);
-  WildCardName(std::string str);
+  WildCardName(const Name& format);
+  WildCardName(const std::string& str);
   WildCardName(const char * str);
   WildCardName(const Block& block);
 
