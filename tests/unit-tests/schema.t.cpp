@@ -25,6 +25,12 @@ BOOST_AUTO_TEST_CASE(SchemaInfoJSON)
   BOOST_CHECK_EQUAL(schema.ruleId, "rule1");
   BOOST_CHECK_EQUAL(schema.minOptionalSigners, 2);
   BOOST_CHECK_EQUAL(schema.signers.size(), 2);
+  BOOST_CHECK_EQUAL(schema.optionalSigners.size(), 3);
+  BOOST_CHECK_EQUAL(schema.signers[0], WildCardName("/example/a/KEY/_/_"));
+  BOOST_CHECK_EQUAL(schema.signers[1], WildCardName("/example/b/KEY/_/_"));
+  BOOST_CHECK_EQUAL(schema.optionalSigners[0], WildCardName("/example/c/KEY/_/_"));
+  BOOST_CHECK_EQUAL(schema.optionalSigners[1], WildCardName("/example/d/KEY/_/_"));
+  BOOST_CHECK_EQUAL(schema.optionalSigners[2], WildCardName("/example/e/KEY/_/_"));
 }
 
 BOOST_AUTO_TEST_CASE(SchemaInfoINFO)
@@ -35,6 +41,79 @@ BOOST_AUTO_TEST_CASE(SchemaInfoINFO)
   BOOST_CHECK_EQUAL(schema.ruleId, "rule1");
   BOOST_CHECK_EQUAL(schema.minOptionalSigners, 2);
   BOOST_CHECK_EQUAL(schema.signers.size(), 2);
+  BOOST_CHECK_EQUAL(schema.optionalSigners.size(), 3);
+  BOOST_CHECK_EQUAL(schema.signers[0], WildCardName("/example/a/KEY/_/_"));
+  BOOST_CHECK_EQUAL(schema.signers[1], WildCardName("/example/b/KEY/_/_"));
+  BOOST_CHECK_EQUAL(schema.optionalSigners[0], WildCardName("/example/c/KEY/_/_"));
+  BOOST_CHECK_EQUAL(schema.optionalSigners[1], WildCardName("/example/d/KEY/_/_"));
+  BOOST_CHECK_EQUAL(schema.optionalSigners[2], WildCardName("/example/e/KEY/_/_"));
+}
+
+BOOST_AUTO_TEST_CASE(SchemaLoadFail)
+{
+  BOOST_CHECK_THROW(MultipartySchema::fromINFO("tests/unit-tests/config-files/nonexistent.info"), std::exception);
+  BOOST_CHECK_THROW(MultipartySchema::fromJSON("tests/unit-tests/config-files/nonexistent.json"), std::exception);
+}
+
+BOOST_AUTO_TEST_CASE(SchemaWrite)
+{
+  MultipartySchema schema;
+  schema.prefix = "/a/b/c";
+  schema.ruleId = "...";
+  schema.signers.emplace_back("/some/key-a");
+  schema.signers.emplace_back("/some/key-b");
+  schema.optionalSigners.emplace_back("/some/key-c");
+  schema.optionalSigners.emplace_back("/some/key-d");
+  schema.minOptionalSigners = 1;
+
+  auto schema2 = MultipartySchema::fromJSON(schema.toString());
+
+  BOOST_CHECK_EQUAL(schema.prefix, schema2.prefix);
+  BOOST_CHECK_EQUAL(schema.ruleId, schema2.ruleId);
+  BOOST_CHECK_EQUAL_COLLECTIONS(schema.signers.begin(), schema.signers.end(),
+                                schema2.signers.begin(), schema2.signers.end());
+  BOOST_CHECK_EQUAL_COLLECTIONS(schema.optionalSigners.begin(), schema.optionalSigners.end(),
+                                schema2.optionalSigners.begin(), schema2.optionalSigners.end());
+  BOOST_CHECK_EQUAL(schema.minOptionalSigners, schema2.minOptionalSigners);
+}
+
+BOOST_AUTO_TEST_CASE(SchemaWrite2)
+{
+  MultipartySchema schema;
+  schema.prefix = "/a/b/c";
+  schema.ruleId = "...";
+  schema.signers.emplace_back("/some/key-a");
+  schema.signers.emplace_back("/some/key-b");
+
+  auto schema2 = MultipartySchema::fromJSON(schema.toString());
+
+  BOOST_CHECK_EQUAL(schema.prefix, schema2.prefix);
+  BOOST_CHECK_EQUAL(schema.ruleId, schema2.ruleId);
+  BOOST_CHECK_EQUAL_COLLECTIONS(schema.signers.begin(), schema.signers.end(),
+                                schema2.signers.begin(), schema2.signers.end());
+  BOOST_CHECK_EQUAL_COLLECTIONS(schema.optionalSigners.begin(), schema.optionalSigners.end(),
+                                schema2.optionalSigners.begin(), schema2.optionalSigners.end());
+  BOOST_CHECK_EQUAL(schema.minOptionalSigners, schema2.minOptionalSigners);
+}
+
+BOOST_AUTO_TEST_CASE(SchemaWrite3)
+{
+  MultipartySchema schema;
+  schema.prefix = "/a/b/c";
+  schema.ruleId = "...";
+  schema.optionalSigners.emplace_back("/some/key-c");
+  schema.optionalSigners.emplace_back("/some/key-d");
+  schema.minOptionalSigners = 1;
+
+  auto schema2 = MultipartySchema::fromJSON(schema.toString());
+
+  BOOST_CHECK_EQUAL(schema.prefix, schema2.prefix);
+  BOOST_CHECK_EQUAL(schema.ruleId, schema2.ruleId);
+  BOOST_CHECK_EQUAL_COLLECTIONS(schema.signers.begin(), schema.signers.end(),
+                                schema2.signers.begin(), schema2.signers.end());
+  BOOST_CHECK_EQUAL_COLLECTIONS(schema.optionalSigners.begin(), schema.optionalSigners.end(),
+                                schema2.optionalSigners.begin(), schema2.optionalSigners.end());
+  BOOST_CHECK_EQUAL(schema.minOptionalSigners, schema2.minOptionalSigners);
 }
 
 BOOST_AUTO_TEST_SUITE_END()  // TestSchema

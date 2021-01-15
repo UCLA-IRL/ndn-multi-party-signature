@@ -82,7 +82,12 @@ MultipartySchema
 MultipartySchema::fromJSON(const std::string& fileOrConfigStr)
 {
   SchemaSection config;
-  boost::property_tree::json_parser::read_json(fileOrConfigStr, config);
+  try {
+    boost::property_tree::json_parser::read_json(fileOrConfigStr, config); // as filename
+  } catch (const std::exception&) {
+    std::istringstream ss(fileOrConfigStr);
+    boost::property_tree::json_parser::read_json(ss, config);
+  }
   return fromSchemaSection(config);
 }
 
@@ -90,7 +95,12 @@ MultipartySchema
 MultipartySchema::fromINFO(const std::string& fileOrConfigStr)
 {
   SchemaSection config;
-  boost::property_tree::info_parser::read_info(fileOrConfigStr, config);
+  try {
+    boost::property_tree::info_parser::read_info(fileOrConfigStr, config); // as filename
+  } catch (const std::exception&) {
+    std::istringstream ss(fileOrConfigStr);
+    boost::property_tree::info_parser::read_info(ss, config);
+  }
   return fromSchemaSection(config);
 }
 
