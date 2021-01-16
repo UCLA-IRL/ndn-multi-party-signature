@@ -105,9 +105,10 @@ MpsSigner::getSignature(const Data& data) const
 }
 
 void
-MpsSigner::sign(Data& data) const
+MpsSigner::sign(Data& data, const Name& keyLocatorName) const
 {
-  SignatureInfo info(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls), m_signerName);
+  SignatureInfo info(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
+                     keyLocatorName.empty()? m_signerName : keyLocatorName);
   auto signature = getSignature(data, info);
 
   data.setSignatureInfo(info);

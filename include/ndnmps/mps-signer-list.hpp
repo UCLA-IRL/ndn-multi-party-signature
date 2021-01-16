@@ -39,6 +39,10 @@ public:
   void
   wireDecode(const Block& wire);
 
+  template <encoding::Tag TAG>
+  size_t
+  wireEncode(EncodingImpl<TAG>& encoder) const;
+
 public:
   bool
   operator==(const MpsSignerList& rhs) {

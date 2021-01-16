@@ -290,7 +290,7 @@ Verifier::asyncVerifySignature(shared_ptr<const Data> data, shared_ptr<const Mul
     VerificationRecord r{data, schema, callback, 0};
     for (const auto &item : itemsToFetch(*data)) {
       Interest interest(item);
-      interest.setCanBePrefix(false);
+      interest.setCanBePrefix(true);
       interest.setMustBeFresh(true);
       interest.setInterestLifetime(INTEREST_TIMEOUT);
       m_face.expressInterest(
@@ -321,7 +321,7 @@ Verifier::removeAll(const Name& name)
 void
 Verifier::onData(const Interest& interest, const Data& data)
 {
-  if (security::Certificate::isValidName(interest.getName())) {
+  if (security::Certificate::isValidName(data.getName())) {
     //certificate
     if (m_certVerifyCallback && m_certVerifyCallback(data)) {
       const auto& c = data.getContent();
@@ -342,16 +342,20 @@ Verifier::onData(const Interest& interest, const Data& data)
   }
   else {
     //signer list
-    data.getContent().parse();
-    for (const auto& item : data.getContent().elements()) {
-      if (item.type() == tlv::MpsSignerList) {
-        addSignerList(interest.getName(), MpsSignerList(item));
-        satisfyItem(interest.getName());
-        return;
+    try {
+      data.getContent().parse();
+      for (const auto &item : data.getContent().elements()) {
+        if (item.type() == tlv::MpsSignerList) {
+          addSignerList(interest.getName(), MpsSignerList(item));
+          satisfyItem(interest.getName());
+          return;
+        }
       }
+      removeAll(interest.getName());
+      NDN_LOG_ERROR("signer list not found in " << interest.getName());
+    } catch (const std::exception& e) {
+      NDN_LOG_ERROR("Catch error on decoding signer list packet: " << e.what());
     }
-    removeAll(interest.getName());
-    NDN_LOG_ERROR("signer list not found in " << interest.getName());
   }
 }
 
@@ -659,6 +663,7 @@ Initiator::successCleanup(uint32_t id)
   Data signerListData;
   signerListData.setName(record.unsignedData->getSignatureInfo().getKeyLocator().getName());
   signerListData.setContent(signerList.wireEncode());
+  signerListData.setFreshnessPeriod(record.unsignedData->getFreshnessPeriod());
   //TODO sign?
 
   buildMultiSignature(*record.unsignedData, pieces);

@@ -33,6 +33,16 @@ MpsSignerList::wireEncode() const
   return wire;
 }
 
+template <encoding::Tag TAG>
+size_t
+MpsSignerList::wireEncode(EncodingImpl<TAG>& encoder) const {
+  auto b = wireEncode();
+  encoder.appendBlock(b);
+  return b.size();
+}
+
+NDN_CXX_DEFINE_WIRE_ENCODE_INSTANTIATIONS(MpsSignerList);
+
 void
 MpsSignerList::wireDecode(const Block& wire)
 {

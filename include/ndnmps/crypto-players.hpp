@@ -78,7 +78,7 @@ public:
    * @return the signature value signed by this signer
    */
   void
-  sign(Data& data) const;
+  sign(Data& data, const Name& keyLocatorName = Name()) const;
 };
 
 class MpsVerifier {

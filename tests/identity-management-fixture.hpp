@@ -11,6 +11,7 @@
 #ifndef NDN_TESTS_IDENTITY_MANAGEMENT_FIXTURE_HPP
 #define NDN_TESTS_IDENTITY_MANAGEMENT_FIXTURE_HPP
 
+#include "unit-test-time-fixture.hpp"
 #include <ndn-cxx/security/key-chain.hpp>
 #include <ndn-cxx/security/signing-helpers.hpp>
 #include <vector>
@@ -81,6 +82,11 @@ public:
 
 protected:
   KeyChain m_keyChain;
+};
+
+class IdentityManagementTimeFixture : public UnitTestTimeFixture
+        , public IdentityManagementFixture
+{
 };
 
 } // namespace tests
