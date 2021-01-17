@@ -185,6 +185,470 @@ BOOST_AUTO_TEST_CASE(VerifierListFetch)
   BOOST_CHECK_EQUAL(output, true);
 }
 
+BOOST_AUTO_TEST_CASE(VerifierParallelFetch)
+{
+  util::DummyClientFace face(io, m_keyChain, {true, true});
+  Verifier verifier(MpsVerifier(), face);
+  verifier.setCertVerifyCallback([](auto&){return true;});
+
+  //request1
+  MpsSigner signer("/a/b/c/KEY/1234");
+  BOOST_CHECK_EQUAL(signer.getSignerKeyName(), "/a/b/c/KEY/1234");
+  auto pub = signer.getPublicKey();
+
+  //certificate
+  security::Certificate cert;
+  cert.setName(Name(signer.getSignerKeyName())
+                       .append("self").appendVersion(5678));
+  BufferPtr ptr = make_shared<Buffer>(blsGetSerializedPublicKeyByteSize());
+  BOOST_ASSERT(blsPublicKeySerialize(ptr->data(), ptr->size(), &pub) != 0);
+  cert.setContent(ptr);
+  cert.setFreshnessPeriod(time::seconds(1000));
+  signer.sign(cert);
+  BOOST_ASSERT(signer.getSignerKeyName().isPrefixOf(cert.getName()));
+
+
+  //data1 to test
+  auto data1 = make_shared<Data>();
+  data1->setName(Name("/a/b/c/d"));
+  data1->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+
+  MultipartySchema schema;
+  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
+
+  signer.sign(*data1);
+
+  auto data2 = make_shared<Data>();
+  data2->setName(Name("/a/b/c/d/2"));
+  data2->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+
+  signer.sign(*data2, "/a/b/NotExist/KEY/1234");
+
+  bool received1 = false;
+  bool received2 = false;
+  face.onSendInterest.connect([&](const Interest& interest){
+    BOOST_CHECK_EQUAL(interest.getCanBePrefix(), true);
+    if (interest.getName().isPrefixOf(cert.getKeyName())) {
+      received1 = true;
+    } else {
+      BOOST_CHECK_EQUAL(interest.getName(), "/a/b/NotExist/KEY/1234");
+      received2 = true;
+    }
+  });
+
+  bool finish1 = false;
+  bool output1 = false;
+  bool finish2 = false;
+  bool output2 = false;
+  verifier.asyncVerifySignature(data1, make_shared<MultipartySchema>(schema),
+                                [&](bool input){finish1 = true; output1 = input;});
+  verifier.asyncVerifySignature(data2, make_shared<MultipartySchema>(schema),
+                                [&](bool input){finish2 = true; output2 = input;});
+  BOOST_CHECK_EQUAL(finish1, false);
+  BOOST_CHECK_EQUAL(finish2, false);
+  advanceClocks(time::milliseconds(20), 10);
+  BOOST_CHECK_EQUAL(received1, true);
+  BOOST_CHECK_EQUAL(received2, true);
+  BOOST_CHECK_EQUAL(finish1, false);
+  BOOST_CHECK_EQUAL(finish2, false);
+  face.receive(cert);
+  advanceClocks(time::milliseconds(20), 10);
+  BOOST_CHECK_EQUAL(finish1, true);
+  BOOST_CHECK_EQUAL(output1, true);
+  BOOST_CHECK_EQUAL(finish2, false);
+  BOOST_CHECK_EQUAL(output2, false);
+  advanceClocks(time::milliseconds(200), 40);
+  BOOST_CHECK_EQUAL(finish2, true);
+  BOOST_CHECK_EQUAL(output2, false);
+}
+
+BOOST_AUTO_TEST_CASE(SignerFetch)
+{
+  util::DummyClientFace face(io, m_keyChain, {true, true});
+  Signer signer(MpsSigner("/a/b/c/KEY/1234"), "/signer", face);
+  signer.setDataVerifyCallback([](auto a){return true;});
+  signer.setSignatureVerifyCallback([](auto a){return true;});
+
+  //data to test
+  Data data1;
+  data1.setName(Name("/a/b/c/d"));
+  data1.setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1.setFreshnessPeriod(time::seconds(1000));
+  data1.setSignatureInfo(SignatureInfo(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
+                                       KeyLocator(signer.getSignerKeyName())));
+  data1.setSignatureValue(make_shared<Buffer>());
+  BOOST_CHECK_NO_THROW(data1.wireEncode());
+
+  //wrapper
+  Data wrapper;
+  wrapper.setName("/some/mps/wrapper/1234");
+  wrapper.setContent(makeNestedBlock(tlv::Content, data1));
+  wrapper.setFreshnessPeriod(time::seconds(1000));
+  m_keyChain.sign(wrapper, signingWithSha256());
+  BOOST_CHECK_NO_THROW(Data(wrapper.getContent().blockFromValue()));
+
+  //initiation interest
+  Interest signInterest;
+  signInterest.setName(Name("/signer/mps/sign"));
+  Block appParam(tlv::ApplicationParameters);
+  appParam.push_back(makeNestedBlock(tlv::UnsignedWrapperName, wrapper.getFullName()));
+  signInterest.setApplicationParameters(appParam);
+  signInterest.setCanBePrefix(false);
+  signInterest.setMustBeFresh(true);
+  BOOST_ASSERT(signInterest.getName().get(-1).isParametersSha256Digest());
+
+  //result interest
+  Interest resultInterest;
+  resultInterest.setName(Name("/signer/mps/result-of")
+        .append(signInterest.getName().get(-1).value(), signInterest.getName().get(-1).value_size()));
+  resultInterest.setCanBePrefix(true);
+  resultInterest.setMustBeFresh(true);
+
+  MultipartySchema schema;
+  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
+
+  bool receivedWrapperFetch = false;
+  face.onSendInterest.connect([&](const Interest& interest){
+    if (!Name("/some").isPrefixOf(interest.getName())) return;
+    BOOST_CHECK_EQUAL(interest.getName(), wrapper.getFullName());
+    receivedWrapperFetch = true;
+  });
+
+  bool result1_received = false;
+  bool result2_received = false;
+  bool init_received = false;
+  face.onSendData.connect([&](const Data& data){
+    if (Name("/signer/mps/result-of").isPrefixOf(data.getName())) {
+      //result
+      BOOST_CHECK_EQUAL(data.getName().size(), 5);
+      BOOST_CHECK(data.getName().get(3).isGeneric());
+      BOOST_CHECK_EQUAL_COLLECTIONS(data.getName().get(3).value_begin(), data.getName().get(3).value_end(),
+                                    signInterest.getName().get(-1).value_begin(), signInterest.getName().get(-1).value_end());
+      if (data.getName().get(-1).toVersion() == 0) {
+        result1_received = true;
+        const auto& content = data.getContent();
+        content.parse();
+        BOOST_CHECK_EQUAL(readString(content.get(tlv::Status)), std::to_string(static_cast<int>(ReplyCode::Processing)));
+      } else {
+        result2_received = true;
+        const auto& content = data.getContent();
+        content.parse();
+        BOOST_CHECK_EQUAL(readString(content.get(tlv::Status)), std::to_string(static_cast<int>(ReplyCode::OK)));
+        const auto& v = content.get(tlv::SignatureValue);
+        auto vbuff = make_shared<Buffer>(v.value(), v.value_size());
+        data1.setSignatureValue(vbuff);
+        MpsVerifier verifier;
+        verifier.addCert(signer.getSignerKeyName(), signer.getPublicKey());
+        BOOST_CHECK(verifier.verifySignature(data1, schema));
+        BOOST_CHECK_EQUAL(data1.getSignatureValue().value_size(), blsGetSerializedSignatureByteSize());
+      }
+    } else {
+      //init
+      BOOST_CHECK_EQUAL(data.getName(), signInterest.getName());
+      const auto& content = data.getContent();
+      content.parse();
+      BOOST_CHECK_EQUAL(readString(content.get(tlv::Status)), std::to_string(static_cast<int>(ReplyCode::Processing)));
+      BOOST_CHECK_EQUAL(Name(content.get(tlv::ResultName).blockFromValue()), resultInterest.getName());
+      init_received = true;
+    }
+  });
+
+  advanceClocks(time::milliseconds(20), 10);
+  face.receive(signInterest);
+  advanceClocks(time::milliseconds(20), 10);
+  BOOST_CHECK_EQUAL(init_received, true);
+  BOOST_CHECK_EQUAL(receivedWrapperFetch, true);
+  face.receive(resultInterest);
+  advanceClocks(time::milliseconds(20), 10);
+  BOOST_CHECK_EQUAL(result1_received, true);
+  face.receive(wrapper);
+  advanceClocks(time::milliseconds(20), 10);
+  face.receive(resultInterest);
+  advanceClocks(time::milliseconds(20), 10);
+  BOOST_CHECK_EQUAL(result2_received, true);
+}
+
+BOOST_AUTO_TEST_CASE(SignerFetchTimeout)
+{
+  util::DummyClientFace face(io, m_keyChain, {true, true});
+  Signer signer(MpsSigner("/a/b/c/KEY/1234"), "/signer", face);
+  signer.setDataVerifyCallback([](auto a){return true;});
+  signer.setSignatureVerifyCallback([](auto a){return true;});
+
+  //wrapper
+  Data wrapper;
+  wrapper.setName("/some/mps/wrapper/1234");
+  wrapper.setContent(makeEmptyBlock(tlv::Content));
+  wrapper.setFreshnessPeriod(time::seconds(1000));
+  m_keyChain.sign(wrapper, signingWithSha256());
+
+  //initiation interest
+  Interest signInterest;
+  signInterest.setName(Name("/signer/mps/sign"));
+  Block appParam(tlv::ApplicationParameters);
+  appParam.push_back(makeNestedBlock(tlv::UnsignedWrapperName, wrapper.getFullName()));
+  signInterest.setApplicationParameters(appParam);
+  signInterest.setCanBePrefix(false);
+  signInterest.setMustBeFresh(true);
+  BOOST_ASSERT(signInterest.getName().get(-1).isParametersSha256Digest());
+
+  //result interest
+  Interest resultInterest;
+  resultInterest.setName(Name("/signer/mps/result-of")
+                                 .append(signInterest.getName().get(-1).value(), signInterest.getName().get(-1).value_size()));
+  resultInterest.setCanBePrefix(true);
+  resultInterest.setMustBeFresh(true);
+
+  MultipartySchema schema;
+  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
+
+  bool receivedWrapperFetch = false;
+  face.onSendInterest.connect([&](const Interest& interest){
+    if (!Name("/some").isPrefixOf(interest.getName())) return;
+    BOOST_CHECK_EQUAL(interest.getName(), wrapper.getFullName());
+    receivedWrapperFetch = true;
+  });
+
+  bool result1_received = false;
+  bool result2_received = false;
+  bool init_received = false;
+  face.onSendData.connect([&](const Data& data){
+    if (Name("/signer/mps/result-of").isPrefixOf(data.getName())) {
+      //result
+      BOOST_CHECK_EQUAL(data.getName().size(), 5);
+      BOOST_CHECK(data.getName().get(3).isGeneric());
+      BOOST_CHECK_EQUAL_COLLECTIONS(data.getName().get(3).value_begin(), data.getName().get(3).value_end(),
+                                    signInterest.getName().get(-1).value_begin(), signInterest.getName().get(-1).value_end());
+      if (data.getName().get(-1).toVersion() == 0) {
+        result1_received = true;
+        const auto& content = data.getContent();
+        content.parse();
+        BOOST_CHECK_EQUAL(readString(content.get(tlv::Status)), std::to_string(static_cast<int>(ReplyCode::Processing)));
+      } else {
+        result2_received = true;
+        const auto& content = data.getContent();
+        content.parse();
+        BOOST_CHECK_EQUAL(readString(content.get(tlv::Status)), std::to_string(static_cast<int>(ReplyCode::FailedDependency)));
+      }
+    } else {
+      //init
+      BOOST_CHECK_EQUAL(data.getName(), signInterest.getName());
+      const auto& content = data.getContent();
+      content.parse();
+      BOOST_CHECK_EQUAL(readString(content.get(tlv::Status)), std::to_string(static_cast<int>(ReplyCode::Processing)));
+      init_received = true;
+    }
+  });
+
+  advanceClocks(time::milliseconds(20), 10);
+  face.receive(signInterest);
+  advanceClocks(time::milliseconds(20), 10);
+  BOOST_CHECK_EQUAL(init_received, true);
+  BOOST_CHECK_EQUAL(receivedWrapperFetch, true);
+  face.receive(resultInterest);
+  advanceClocks(time::milliseconds(20), 10);
+  BOOST_CHECK_EQUAL(result1_received, true);
+  advanceClocks(time::milliseconds(200), 40);
+  face.receive(resultInterest);
+  advanceClocks(time::milliseconds(20), 10);
+  BOOST_CHECK_EQUAL(result2_received, true);
+}
+
+BOOST_AUTO_TEST_CASE(SignerFetchNotFound)
+{
+  util::DummyClientFace face(io, m_keyChain, {true, true});
+  Signer signer(MpsSigner("/a/b/c/KEY/1234"), "/signer", face);
+  signer.setDataVerifyCallback([](auto a){return true;});
+  signer.setSignatureVerifyCallback([](auto a){return true;});
+
+  //initiation interest
+  Interest signInterest;
+  signInterest.setName(Name("/signer/mps/sign"));
+  Block appParam(tlv::ApplicationParameters);
+  appParam.push_back(makeEmptyBlock(tlv::UnsignedWrapperName));
+  signInterest.setApplicationParameters(appParam);
+  signInterest.setCanBePrefix(false);
+  signInterest.setMustBeFresh(true);
+  BOOST_ASSERT(signInterest.getName().get(-1).isParametersSha256Digest());
+
+  //result interest
+  Interest resultInterest;
+  resultInterest.setName(Name("/signer/mps/result-of")
+                                 .append(signInterest.getName().get(-1).value(), signInterest.getName().get(-1).value_size()));
+  resultInterest.setCanBePrefix(true);
+  resultInterest.setMustBeFresh(true);
+
+  MultipartySchema schema;
+  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
+
+  bool result1_received = false;
+  face.onSendData.connect([&](const Data& data){
+    if (Name("/signer/mps/result-of").isPrefixOf(data.getName())) {
+      //result
+      BOOST_CHECK_EQUAL(data.getName().size(), 5);
+      BOOST_CHECK(data.getName().get(3).isGeneric());
+      BOOST_CHECK_EQUAL_COLLECTIONS(data.getName().get(3).value_begin(), data.getName().get(3).value_end(),
+                                    signInterest.getName().get(-1).value_begin(),
+                                    signInterest.getName().get(-1).value_end());
+      result1_received = true;
+      const auto &content = data.getContent();
+      content.parse();
+      BOOST_CHECK_EQUAL(readString(content.get(tlv::Status)), std::to_string(static_cast<int>(ReplyCode::NotFound)));
+    }
+  });
+
+  advanceClocks(time::milliseconds(20), 10);
+  face.receive(resultInterest);
+  advanceClocks(time::milliseconds(20), 10);
+  BOOST_CHECK_EQUAL(result1_received, true);
+}
+
+BOOST_AUTO_TEST_CASE(SignerFetchBadInit)
+{
+  util::DummyClientFace face(io, m_keyChain, {true, true});
+  Signer signer(MpsSigner("/a/b/c/KEY/1234"), "/signer", face);
+  signer.setDataVerifyCallback([](auto a){return true;});
+  signer.setSignatureVerifyCallback([](auto a){return true;});
+
+  //data to test
+  Data data1;
+  data1.setName(Name("/a/b/c/d"));
+  data1.setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1.setFreshnessPeriod(time::seconds(1000));
+  data1.setSignatureInfo(SignatureInfo(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
+                                       KeyLocator(signer.getSignerKeyName())));
+  data1.setSignatureValue(make_shared<Buffer>());
+  BOOST_CHECK_NO_THROW(data1.wireEncode());
+
+  //wrapper
+  Data wrapper;
+  wrapper.setName("/some/mps/wrapper/1234");
+  wrapper.setContent(makeNestedBlock(tlv::Content, data1));
+  wrapper.setFreshnessPeriod(time::seconds(1000));
+  m_keyChain.sign(wrapper, signingWithSha256());
+  BOOST_CHECK_NO_THROW(Data(wrapper.getContent().blockFromValue()));
+
+  //initiation interest
+  Interest signInterest;
+  signInterest.setName(Name("/signer/mps/sign"));
+  Block appParam(tlv::ApplicationParameters);
+  appParam.push_back(makeNestedBlock(tlv::UnsignedWrapperName, wrapper.getName()));
+  signInterest.setApplicationParameters(appParam);
+  signInterest.setCanBePrefix(false);
+  signInterest.setMustBeFresh(true);
+  BOOST_ASSERT(signInterest.getName().get(-1).isParametersSha256Digest());
+
+  bool receivedWrapperFetch = false;
+  face.onSendInterest.connect([&](const Interest& interest){
+    if (!Name("/some").isPrefixOf(interest.getName())) return;
+    BOOST_CHECK_EQUAL(interest.getName(), wrapper.getFullName());
+    receivedWrapperFetch = true;
+  });
+
+  bool init_received = false;
+  face.onSendData.connect([&](const Data& data) {
+    //init
+    BOOST_CHECK_EQUAL(data.getName(), signInterest.getName());
+    const auto& content = data.getContent();
+    content.parse();
+    BOOST_CHECK_EQUAL(readString(content.get(tlv::Status)), std::to_string(static_cast<int>(ReplyCode::BadRequest)));
+    init_received = true;
+  });
+
+  advanceClocks(time::milliseconds(20), 10);
+  face.receive(signInterest);
+  advanceClocks(time::milliseconds(20), 10);
+  BOOST_CHECK_EQUAL(init_received, true);
+}
+
+BOOST_AUTO_TEST_CASE(SignerFetchBadWrapper)
+{
+  util::DummyClientFace face(io, m_keyChain, {true, true});
+  Signer signer(MpsSigner("/a/b/c/KEY/1234"), "/signer", face);
+  signer.setDataVerifyCallback([](auto a){return true;});
+  signer.setSignatureVerifyCallback([](auto a){return true;});
+
+  //wrapper
+  Data wrapper;
+  wrapper.setName("/some/mps/wrapper/1234");
+  wrapper.setContent(makeEmptyBlock(tlv::Content));
+  wrapper.setFreshnessPeriod(time::seconds(1000));
+  m_keyChain.sign(wrapper, signingWithSha256());
+
+  //initiation interest
+  Interest signInterest;
+  signInterest.setName(Name("/signer/mps/sign"));
+  Block appParam(tlv::ApplicationParameters);
+  appParam.push_back(makeNestedBlock(tlv::UnsignedWrapperName, wrapper.getFullName()));
+  signInterest.setApplicationParameters(appParam);
+  signInterest.setCanBePrefix(false);
+  signInterest.setMustBeFresh(true);
+  BOOST_ASSERT(signInterest.getName().get(-1).isParametersSha256Digest());
+
+  //result interest
+  Interest resultInterest;
+  resultInterest.setName(Name("/signer/mps/result-of")
+                                 .append(signInterest.getName().get(-1).value(), signInterest.getName().get(-1).value_size()));
+  resultInterest.setCanBePrefix(true);
+  resultInterest.setMustBeFresh(true);
+
+  MultipartySchema schema;
+  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
+
+  bool receivedWrapperFetch = false;
+  face.onSendInterest.connect([&](const Interest& interest){
+    if (!Name("/some").isPrefixOf(interest.getName())) return;
+    BOOST_CHECK_EQUAL(interest.getName(), wrapper.getFullName());
+    receivedWrapperFetch = true;
+  });
+
+  bool result1_received = false;
+  bool result2_received = false;
+  bool init_received = false;
+  face.onSendData.connect([&](const Data& data){
+    if (Name("/signer/mps/result-of").isPrefixOf(data.getName())) {
+      //result
+      BOOST_CHECK_EQUAL(data.getName().size(), 5);
+      BOOST_CHECK(data.getName().get(3).isGeneric());
+      BOOST_CHECK_EQUAL_COLLECTIONS(data.getName().get(3).value_begin(), data.getName().get(3).value_end(),
+                                    signInterest.getName().get(-1).value_begin(), signInterest.getName().get(-1).value_end());
+      if (data.getName().get(-1).toVersion() == 0) {
+        result1_received = true;
+        const auto& content = data.getContent();
+        content.parse();
+        BOOST_CHECK_EQUAL(readString(content.get(tlv::Status)), std::to_string(static_cast<int>(ReplyCode::Processing)));
+      } else {
+        result2_received = true;
+        const auto& content = data.getContent();
+        content.parse();
+        BOOST_CHECK_EQUAL(readString(content.get(tlv::Status)), std::to_string(static_cast<int>(ReplyCode::FailedDependency)));
+      }
+    } else {
+      //init
+      BOOST_CHECK_EQUAL(data.getName(), signInterest.getName());
+      const auto& content = data.getContent();
+      content.parse();
+      BOOST_CHECK_EQUAL(readString(content.get(tlv::Status)), std::to_string(static_cast<int>(ReplyCode::Processing)));
+      BOOST_CHECK_EQUAL(Name(content.get(tlv::ResultName).blockFromValue()), resultInterest.getName());
+      init_received = true;
+    }
+  });
+
+  advanceClocks(time::milliseconds(20), 10);
+  face.receive(signInterest);
+  advanceClocks(time::milliseconds(20), 10);
+  BOOST_CHECK_EQUAL(init_received, true);
+  BOOST_CHECK_EQUAL(receivedWrapperFetch, true);
+  face.receive(resultInterest);
+  advanceClocks(time::milliseconds(20), 10);
+  BOOST_CHECK_EQUAL(result1_received, true);
+  face.receive(wrapper);
+  advanceClocks(time::milliseconds(20), 10);
+  face.receive(resultInterest);
+  advanceClocks(time::milliseconds(20), 10);
+  BOOST_CHECK_EQUAL(result2_received, true);
+}
+
 
 //TODO get schema with key(multiple round)
 

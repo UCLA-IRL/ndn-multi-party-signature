@@ -18,14 +18,13 @@ class Signer : public MpsSigner {
 private:
   Name m_prefix;
   Face& m_face;
-  function<bool(const Data&, const Name& schema)> m_dataVerifyCallback;
+  function<bool(const Data&)> m_dataVerifyCallback;
   function<bool(const Interest&)> m_interestVerifyCallback;
   std::list<RegisteredPrefixHandle> m_handles;
 
   struct RequestInfo {
     ReplyCode status;
     uint64_t versionCount;
-    Name signerListName;
     optional<Block> value;
     RequestInfo();
   };
@@ -40,7 +39,7 @@ public:
   virtual ~Signer();
 
   void
-  setDataVerifyCallback(const function<bool(const Data&, const Name& schema)>& func);
+  setDataVerifyCallback(const function<bool(const Data&)>& func);
   void
   setSignatureVerifyCallback(const function<bool(const Interest&)>& func);
 

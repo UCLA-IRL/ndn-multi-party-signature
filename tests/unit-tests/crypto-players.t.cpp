@@ -45,7 +45,8 @@ BOOST_AUTO_TEST_CASE(TestSignerVerifier)
   schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
 
   signer.sign(data1);
-  BOOST_ASSERT(verifier.verifySignature(data1, schema));
+  BOOST_CHECK(verifier.verifySignature(data1, schema));
+  BOOST_CHECK_EQUAL(data1.getSignatureValue().value_size(), blsGetSerializedSignatureByteSize());
 }
 
 BOOST_AUTO_TEST_CASE(TestSignerVerifierBadKey)

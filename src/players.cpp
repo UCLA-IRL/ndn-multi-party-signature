@@ -25,7 +25,8 @@ Signer::Signer(MpsSigner mpsSigner, const Name& prefix, Face& face)
 
   Name resultPrefix = m_prefix;
   resultPrefix.append("mps").append("result-of");
-  m_handles.push_back(m_face.setInterestFilter(resultPrefix, [&](auto &&, auto && PH2) { onResult(PH2); }, nullptr,
+  m_handles.push_back(m_face.setInterestFilter(
+          resultPrefix, [&](auto &&, auto && PH2) { onResult(PH2); }, nullptr,
                                                Signer::onRegisterFail));
 }
 
@@ -37,7 +38,7 @@ Signer::~Signer()
 }
 
 void
-Signer::setDataVerifyCallback(const function<bool(const Data&, const Name& schema)>& func)
+Signer::setDataVerifyCallback(const function<bool(const Data&)>& func)
 {
   m_dataVerifyCallback = func;
 }
@@ -69,13 +70,11 @@ Signer::onInvocation(const Interest& interest)
     for (const auto &item : b.elements()) {
       if (item.type() == tlv::UnsignedWrapperName && wrapperName.empty()) {
         wrapperName = Name(item.blockFromValue());
-      } else if (item.type() == tlv::SignerListName && info.signerListName.empty()) {
-        info.signerListName = Name(item.blockFromValue());
       } else {
         NDN_THROW(std::runtime_error("Bad element type in signer's request"));
       }
     }
-    if (wrapperName.empty() || info.signerListName.empty() || !wrapperName.at(-1).isImplicitSha256Digest()) {
+    if (wrapperName.empty() || !wrapperName.at(-1).isImplicitSha256Digest()) {
       NDN_THROW(std::runtime_error("Block Element not found"));
     }
   } catch (const std::exception &e) {
@@ -89,7 +88,7 @@ Signer::onInvocation(const Interest& interest)
     NDN_LOG_ERROR("interest not end with parameter SHA digest: " << interest.getName());
     return;
   }
-  auto id = interest.getName().get(-1).getBuffer();
+  auto id = make_shared<const Buffer>(interest.getName().get(-1).value(), interest.getName().get(-1).value_size());
   while (m_states.count(*id)) {
     Buffer newBuffer(32);
     random::generateSecureBytes(newBuffer.data(), 32);
@@ -113,29 +112,37 @@ Signer::onInvocation(const Interest& interest)
 void
 Signer::onResult(const Interest& interest) {
   //parse
-  if (interest.getName().size() < m_prefix.size() + 3 || interest.getName().size() > m_prefix.size() + 4
-      || !interest.getName().get(m_prefix.size() + 2).isNumber()) {
+  if (interest.getName().size() < m_prefix.size() + 3
+    || interest.getName().size() > m_prefix.size() + 5
+      || !interest.getName().get(m_prefix.size() + 2).isGeneric()) {
     NDN_LOG_ERROR("Bad result request name format");
     replyError(interest.getName(), ReplyCode::BadRequest);
-  } else if (interest.getName().size() == m_prefix.size() + 4 && !interest.getName().get(-1).isVersion()) {
+  } else if (interest.getName().size() >= m_prefix.size() + 4 && !interest.getName().get(-1).isVersion()) {
     NDN_LOG_ERROR("Bad result request version");
     replyError(interest.getName(), ReplyCode::BadRequest);
   }
-  auto requestId = interest.getName().get(m_prefix.size() + 2).getBuffer();
-  uint64_t versionNum = interest.getName().size() != m_prefix.size() + 4 ? 0 :
+  auto requestId = make_shared<Buffer>(interest.getName().get(m_prefix.size() + 2).value(), interest.getName().get(m_prefix.size() + 2).value_size());
+  uint64_t versionNum = interest.getName().size() < m_prefix.size() + 4 ? 0 :
                     interest.getName().get(m_prefix.size() + 3).toVersion();
 
   const auto &it = m_states.find(*requestId);
-  if (it != m_states.end() && it->second.status == ReplyCode::Processing) {
+  if (it != m_states.end()) {
+    if (versionNum > it->second.versionCount) {
+      NDN_LOG_ERROR("Bad version number: requested " << versionNum << " state current: " << it->second.versionCount);
+      replyError(interest.getName(), ReplyCode::BadRequest);
+      return;
+    }
+    if (it->second.status == ReplyCode::OK && !it->second.value.has_value()) {
+      it->second.status = ReplyCode::InternalError;
+    }
+
+    reply(interest.getName(), requestId);
     it->second.versionCount++;
-    if (it->second.versionCount < versionNum) it->second.versionCount = versionNum;
-  }
-  if (it->second.status == ReplyCode::OK && !it->second.value.has_value()) {
-    it->second.status = ReplyCode::InternalError;
-  }
-  reply(interest.getName(), requestId);
-  if (it != m_states.end() && it->second.status != ReplyCode::Processing) {
-    m_states.erase(it);
+    if (it != m_states.end() && it->second.status != ReplyCode::Processing) {
+      m_states.erase(it);
+    }
+  } else {
+    replyError(interest.getName(), ReplyCode::NotFound);
   }
 }
 
@@ -159,7 +166,7 @@ Signer::reply(const Name& interestName, ConstBufferPtr requestId) const {
   if (it->second.status == ReplyCode::Processing) {
     block.push_back(makeNonNegativeIntegerBlock(tlv::ResultAfter, ESTIMATE_PROCESS_TIME.count()));
     Name newResultName = m_prefix;
-    newResultName.append("mps").append("result-of").appendParametersSha256Digest(requestId);
+    newResultName.append("mps").append("result-of").append(requestId->data(), requestId->size());
     block.push_back(makeNestedBlock(tlv::ResultName, newResultName));
   } else if (it->second.status == ReplyCode::OK) {
     block.push_back(*it->second.value);
@@ -168,7 +175,7 @@ Signer::reply(const Name& interestName, ConstBufferPtr requestId) const {
     return;
   }
   data.setContent(block);
-  //TODO Sign?
+  sign(data); //TODO Sign or just digest ?
   m_face.put(data);
 }
 
@@ -176,10 +183,15 @@ void
 Signer::replyError(const Name& interestName, ReplyCode errorCode) const
 {
   Data data;
-  data.setName(interestName);
+  if (readString(interestName.get(m_prefix.size() + 1)) == "result-of"
+      && !interestName.get(-1).isVersion()) {
+    data.setName(Name(interestName).appendVersion(100));
+  } else {
+    data.setName(interestName);
+  }
   data.setContent(Block(tlv::Content, makeStringBlock(tlv::Status,
                                                       std::to_string(static_cast<int>(errorCode)))));
-  //TODO Sign?
+  sign(data); //TODO Sign or just digest ?
   m_face.put(data);
 }
 
@@ -207,12 +219,12 @@ Signer::onData(const Interest& interest, const Data& data)
       unsignedData = Data(data.getContent().blockFromValue());
       if (!unsignedData.getSignatureInfo()) {
         NDN_LOG_ERROR("Unsigned Data does not have encoding");
-        code = ReplyCode::BadRequest;
+        code = ReplyCode::FailedDependency;
       }
     }
     catch (const std::exception& e) {
       NDN_LOG_ERROR("Unsigned Data encoding fail");
-      code = ReplyCode::BadRequest;
+      code = ReplyCode::FailedDependency;
     }
   }
 
@@ -221,12 +233,11 @@ Signer::onData(const Interest& interest, const Data& data)
     return;
   }
   const Buffer& id = m_unsignedNames.at(interest.getName());
-  m_unsignedNames.erase(interest.getName());
   if (m_states.count(id) == 0)
     return;
   RequestInfo& state = m_states.at(id);
   if (code == ReplyCode::OK) {
-    if (!m_dataVerifyCallback || !m_dataVerifyCallback(data, state.signerListName)) {
+    if (!m_dataVerifyCallback || !m_dataVerifyCallback(data)) {
       NDN_LOG_ERROR("Unsigned Data verification fail");
       code = ReplyCode::Unauthorized;
     }
@@ -238,6 +249,9 @@ Signer::onData(const Interest& interest, const Data& data)
   }
   //sign
   state.value = getSignature(unsignedData);
+
+  //cleanup
+  m_unsignedNames.erase(interest.getName());
 }
 
 void
@@ -247,10 +261,10 @@ Signer::onNack(const Interest& interest, const lp::Nack& nack)
 
   if (m_unsignedNames.count(interest.getName()) != 0) {
     auto id = m_unsignedNames.at(interest.getName());
-    m_unsignedNames.erase(interest.getName());
     if (m_states.count(id) != 0) {
       m_states.at(id).status = ReplyCode::FailedDependency;
     }
+    m_unsignedNames.erase(interest.getName());
   }
 }
 
@@ -261,10 +275,10 @@ Signer::onTimeout(const Interest& interest)
 
   if (m_unsignedNames.count(interest.getName()) != 0) {
     auto id = m_unsignedNames.at(interest.getName());
-    m_unsignedNames.erase(interest.getName());
     if (m_states.count(id) != 0) {
       m_states.at(id).status = ReplyCode::FailedDependency;
     }
+    m_unsignedNames.erase(interest.getName());
   }
 }
 
@@ -468,6 +482,7 @@ Initiator::multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> 
   currentRecord.unsignedData->setSignatureInfo(
       SignatureInfo(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
                     KeyLocator(Name(m_prefix).append("mps").append("signers").append(toHex(wrapperBuf.data(), 8)))));
+  currentRecord.unsignedData->setSignatureValue(make_shared<Buffer>()); // placeholder
 
   //wrapper
   currentRecord.wrapper.setName(Name(m_prefix).append("mps").append("wrapper").append(toHex(wrapperBuf.data(), 8)));
@@ -560,7 +575,7 @@ Initiator::onData(uint32_t id, const Name& keyName, const Interest&, const Data&
     m_scheduler.schedule(result_ms, [&] {
       Interest interest;
       interest.setName(resultName);
-      interest.setCanBePrefix(false);
+      interest.setCanBePrefix(true);
       interest.setMustBeFresh(true);
       interest.setInterestLifetime(INTEREST_TIMEOUT);
       m_face.expressInterest(interest,

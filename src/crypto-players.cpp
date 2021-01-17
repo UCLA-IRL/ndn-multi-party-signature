@@ -112,7 +112,9 @@ MpsSigner::sign(Data& data, const Name& keyLocatorName) const
   auto signature = getSignature(data, info);
 
   data.setSignatureInfo(info);
-  data.setSignatureValue(signature.getBuffer());
+  auto value = make_shared<Buffer>(signature.value(), signature.value_size());
+  data.setSignatureValue(value);
+  data.wireEncode();
 }
 
 MpsVerifier::MpsVerifier()
@@ -330,9 +332,8 @@ MpsAggregater::buildMultiSignature(Data& dataWithInfo, const std::vector<blsSign
   }
   sigBuffer->resize(writtenSize);
 
-  Block sigValue(tlv::SignatureValue, sigBuffer);
-
-  dataWithInfo.setSignatureValue(sigValue.getBuffer());
+  dataWithInfo.setSignatureValue(sigBuffer);
+  dataWithInfo.wireEncode();
 }
 
 }  // namespace ndn
