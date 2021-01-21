@@ -135,10 +135,11 @@ private:
   std::map<uint32_t, InitiationRecord> m_records;
   std::map<Name, uint32_t> m_wrapToId;
   std::function<void(Interest&)> m_interestSigningCallback;
-  std::function<void(Data&)> m_dataSigningCallback;
-
+  KeyChain& m_keyChain;
+  Name m_signingKeyName;
 public:
-  Initiator(MpsVerifier& verifier, const Name& prefix, Face& face, Scheduler& scheduler);
+  Initiator(MpsVerifier& verifier, const Name& prefix, Face& face, Scheduler& scheduler,
+            KeyChain& keyChain, const Name& signingKeyName);
   virtual ~Initiator();
 
   void
@@ -149,8 +150,6 @@ public:
 
   void
   setInterestSignCallback(std::function<void(Interest&)> func);
-  void
-  setDataSignCallback(std::function<void(Data&)> func);
 
   void
   multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> unfinishedData,

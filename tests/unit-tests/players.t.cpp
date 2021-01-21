@@ -657,6 +657,7 @@ BOOST_AUTO_TEST_CASE(SignerFetchBadWrapper)
 
 BOOST_AUTO_TEST_CASE(InitiatorTest)
 {
+  m_keyChain.createIdentity("/initiator");
   util::DummyClientFace signerFace(io, m_keyChain, {true, true});
   Signer signer(MpsSigner("/a/b/c/KEY/1234"), "/signer", signerFace);
   signer.setDataVerifyCallback([](auto a) { return true; });
@@ -665,11 +666,9 @@ BOOST_AUTO_TEST_CASE(InitiatorTest)
   util::DummyClientFace initiatorFace(io, m_keyChain, {true, true});
   MpsVerifier mpsVerifier;
   Scheduler scheduler(io);
-  Initiator initiator(mpsVerifier, "/initiator", initiatorFace, scheduler);
+  Initiator initiator(mpsVerifier, "/initiator", initiatorFace, scheduler, m_keyChain,
+                      m_keyChain.getPib().getIdentity("/initiator").getDefaultKey().getName());
   initiator.addSigner(signer.getSignerKeyName(), signer.getPublicKey(), "/signer");
-  initiator.setDataSignCallback([&](Data &data) {
-    m_keyChain.sign(data, signingWithSha256());
-  });
   initiatorFace.linkTo(signerFace);
 
   //data to test
@@ -781,16 +780,15 @@ BOOST_AUTO_TEST_CASE(InitiatorTest)
 
 BOOST_AUTO_TEST_CASE(InitiatorTestTimeout)
 {
+  m_keyChain.createIdentity("/initiator");
   MpsSigner signer("/a/b/c/KEY/1234");
 
   util::DummyClientFace initiatorFace(io, m_keyChain, {true, true});
   MpsVerifier mpsVerifier;
   Scheduler scheduler(io);
-  Initiator initiator(mpsVerifier, "/initiator", initiatorFace, scheduler);
+  Initiator initiator(mpsVerifier, "/initiator", initiatorFace, scheduler, m_keyChain,
+                      m_keyChain.getPib().getIdentity("/initiator").getDefaultKey().getName());
   initiator.addSigner(signer.getSignerKeyName(), signer.getPublicKey(), "/signer");
-  initiator.setDataSignCallback([&](Data &data) {
-    m_keyChain.sign(data, signingWithSha256());
-  });
 
   //data to test
   auto data1 = make_shared<Data>();
@@ -839,6 +837,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTestTimeout)
 
 BOOST_AUTO_TEST_CASE(InitiatorTestUnauthorized)
 {
+  m_keyChain.createIdentity("/initiator");
   util::DummyClientFace signerFace(io, m_keyChain, {true, true});
   Signer signer(MpsSigner("/a/b/c/KEY/1234"), "/signer", signerFace);
   signer.setDataVerifyCallback([](auto a) { return true; });
@@ -847,11 +846,8 @@ BOOST_AUTO_TEST_CASE(InitiatorTestUnauthorized)
   util::DummyClientFace initiatorFace(io, m_keyChain, {true, true});
   MpsVerifier mpsVerifier;
   Scheduler scheduler(io);
-  Initiator initiator(mpsVerifier, "/initiator", initiatorFace, scheduler);
-  initiator.addSigner(signer.getSignerKeyName(), signer.getPublicKey(), "/signer");
-  initiator.setDataSignCallback([&](Data &data) {
-    m_keyChain.sign(data, signingWithSha256());
-  });
+  Initiator initiator(mpsVerifier, "/initiator", initiatorFace, scheduler, m_keyChain,
+                      m_keyChain.getPib().getIdentity("/initiator").getDefaultKey().getName());initiator.addSigner(signer.getSignerKeyName(), signer.getPublicKey(), "/signer");
   initiatorFace.linkTo(signerFace);
 
   //data to test
@@ -913,6 +909,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTestUnauthorized)
 
 BOOST_AUTO_TEST_CASE(InitiatorTestDataVerifyFail)
 {
+  m_keyChain.createIdentity("/initiator");
   util::DummyClientFace signerFace(io, m_keyChain, {true, true});
   Signer signer(MpsSigner("/a/b/c/KEY/1234"), "/signer", signerFace);
   signer.setDataVerifyCallback([](auto a) { return false; });
@@ -921,11 +918,9 @@ BOOST_AUTO_TEST_CASE(InitiatorTestDataVerifyFail)
   util::DummyClientFace initiatorFace(io, m_keyChain, {true, true});
   MpsVerifier mpsVerifier;
   Scheduler scheduler(io);
-  Initiator initiator(mpsVerifier, "/initiator", initiatorFace, scheduler);
+  Initiator initiator(mpsVerifier, "/initiator", initiatorFace, scheduler, m_keyChain,
+                      m_keyChain.getPib().getIdentity("/initiator").getDefaultKey().getName());
   initiator.addSigner(signer.getSignerKeyName(), signer.getPublicKey(), "/signer");
-  initiator.setDataSignCallback([&](Data &data) {
-    m_keyChain.sign(data, signingWithSha256());
-  });
   initiatorFace.linkTo(signerFace);
 
   //data to test
@@ -1028,6 +1023,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTestDataVerifyFail)
 
 BOOST_AUTO_TEST_CASE(InitiatorTestBadSignature)
 {
+  m_keyChain.createIdentity("/initiator");
   util::DummyClientFace signerFace(io, m_keyChain, {true, true});
   Signer signer(MpsSigner("/a/b/c/KEY/1234"), "/signer", signerFace);
   signer.setDataVerifyCallback([](auto a) { return true; });
@@ -1038,11 +1034,9 @@ BOOST_AUTO_TEST_CASE(InitiatorTestBadSignature)
   util::DummyClientFace initiatorFace(io, m_keyChain, {true, true});
   MpsVerifier mpsVerifier;
   Scheduler scheduler(io);
-  Initiator initiator(mpsVerifier, "/initiator", initiatorFace, scheduler);
+  Initiator initiator(mpsVerifier, "/initiator", initiatorFace, scheduler, m_keyChain,
+                      m_keyChain.getPib().getIdentity("/initiator").getDefaultKey().getName());
   initiator.addSigner(signer.getSignerKeyName(), MpsSigner("/a/b/c/KEY/1234").getPublicKey(), "/signer"); // bad key
-  initiator.setDataSignCallback([&](Data &data) {
-    m_keyChain.sign(data, signingWithSha256());
-  });
   initiatorFace.linkTo(signerFace);
 
   //data to test

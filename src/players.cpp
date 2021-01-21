@@ -406,11 +406,14 @@ Verifier::onTimeout(const Interest& interest)
   NDN_LOG_ERROR("interest time out for " << interest.getName());
 }
 
-Initiator::Initiator(MpsVerifier& verifier, const Name& prefix, Face& face, Scheduler& scheduler)
+Initiator::Initiator(MpsVerifier& verifier, const Name& prefix, Face& face, Scheduler& scheduler,
+                     KeyChain& keyChain, const Name& signingKeyName)
     : m_verifier(verifier)
     , m_prefix(prefix)
     , m_face(face)
     , m_scheduler(scheduler)
+    , m_keyChain(keyChain)
+    , m_signingKeyName(signingKeyName)
 {
   m_handle = m_face.setInterestFilter(
       m_prefix, [&](auto&&, auto&& PH2) { onWrapperFetch(PH2); }, nullptr,
@@ -442,12 +445,6 @@ void
 Initiator::setInterestSignCallback(std::function<void(Interest&)> func)
 {
   m_interestSigningCallback = std::move(func);
-}
-
-void
-Initiator::setDataSignCallback(std::function<void(Data&)> func)
-{
-  m_dataSigningCallback = std::move(func);
 }
 
 void
@@ -496,12 +493,7 @@ Initiator::multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> 
   currentRecord.wrapper.setContent(makeNestedBlock(tlv::Content, *currentRecord.unsignedData));
   currentRecord.wrapper.setFreshnessPeriod(TIMEOUT);
   //TODO sign?
-  if (!m_dataSigningCallback) {
-    NDN_LOG_ERROR("No valid data signing callback");
-    return;
-  } else {
-    m_dataSigningCallback(currentRecord.wrapper);
-  }
+  m_keyChain.sign(currentRecord.wrapper, signingByKey(m_signingKeyName));
   auto wrapperFullName = currentRecord.wrapper.getFullName();
   m_wrapToId.emplace(wrapperFullName, currentId);
 
@@ -697,12 +689,7 @@ Initiator::successCleanup(uint32_t id)
   signerListData.setContent(signerList.wireEncode());
   signerListData.setFreshnessPeriod(record.unsignedData->getFreshnessPeriod());
   //TODO sign?
-  if (!m_dataSigningCallback) {
-    NDN_LOG_ERROR("No valid data signing callback");
-    return;
-  } else {
-    m_dataSigningCallback(signerListData);
-  }
+  m_keyChain.sign(signerListData, signingByKey(m_signingKeyName));
 
   buildMultiSignature(*record.unsignedData, pieces);
 
