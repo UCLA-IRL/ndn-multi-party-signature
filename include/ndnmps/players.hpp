@@ -126,7 +126,7 @@ private:
     InitiationRecord(const MultipartySchema& trySchema, std::shared_ptr<Data> data,
                      const SignatureFinishCallback& successCb, const SignatureFailureCallback& failureCb);
   };
-  MpsVerifier& m_verifier;
+  MpsVerifier m_verifier;
   Face& m_face;
   const Name m_prefix;
   Scheduler& m_scheduler;
@@ -135,11 +135,13 @@ private:
   std::map<uint32_t, InitiationRecord> m_records;
   std::map<Name, uint32_t> m_wrapToId;
   std::function<void(Interest&)> m_interestSigningCallback;
-  KeyChain& m_keyChain;
-  Name m_signingKeyName;
+  variant<std::pair<KeyChain&, Name>, MpsSigner> m_signer;
 public:
-  Initiator(MpsVerifier& verifier, const Name& prefix, Face& face, Scheduler& scheduler,
+  Initiator(const MpsVerifier& verifier, const Name& prefix, Face& face, Scheduler& scheduler,
             KeyChain& keyChain, const Name& signingKeyName);
+
+  Initiator(const MpsVerifier& verifier, const Name& prefix, Face& face, Scheduler& scheduler,
+            const MpsSigner& dataSigner);
   virtual ~Initiator();
 
   void

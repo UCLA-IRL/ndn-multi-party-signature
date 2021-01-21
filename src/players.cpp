@@ -406,18 +406,30 @@ Verifier::onTimeout(const Interest& interest)
   NDN_LOG_ERROR("interest time out for " << interest.getName());
 }
 
-Initiator::Initiator(MpsVerifier& verifier, const Name& prefix, Face& face, Scheduler& scheduler,
+Initiator::Initiator(const MpsVerifier& verifier, const Name& prefix, Face& face, Scheduler& scheduler,
                      KeyChain& keyChain, const Name& signingKeyName)
     : m_verifier(verifier)
     , m_prefix(prefix)
     , m_face(face)
     , m_scheduler(scheduler)
-    , m_keyChain(keyChain)
-    , m_signingKeyName(signingKeyName)
+    , m_signer(std::pair<KeyChain&, Name>(keyChain, signingKeyName))
 {
   m_handle = m_face.setInterestFilter(
       m_prefix, [&](auto&&, auto&& PH2) { onWrapperFetch(PH2); }, nullptr,
       Initiator::onRegisterFail);
+}
+
+Initiator::Initiator(const MpsVerifier& verifier, const Name& prefix, Face& face, Scheduler& scheduler,
+const MpsSigner& dataSigner)
+        : m_verifier(verifier)
+        , m_prefix(prefix)
+        , m_face(face)
+        , m_scheduler(scheduler)
+        , m_signer(dataSigner)
+{
+  m_handle = m_face.setInterestFilter(
+          m_prefix, [&](auto&&, auto&& PH2) { onWrapperFetch(PH2); }, nullptr,
+          Initiator::onRegisterFail);
 }
 
 Initiator::InitiationRecord::InitiationRecord(const MultipartySchema& trySchema, std::shared_ptr<Data> data,
@@ -493,7 +505,11 @@ Initiator::multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> 
   currentRecord.wrapper.setContent(makeNestedBlock(tlv::Content, *currentRecord.unsignedData));
   currentRecord.wrapper.setFreshnessPeriod(TIMEOUT);
   //TODO sign?
-  m_keyChain.sign(currentRecord.wrapper, signingByKey(m_signingKeyName));
+  if (m_signer.index() == 0) {
+    m_signer.get<0>().first.sign(currentRecord.wrapper, signingByKey(m_signer.get<0>().second));
+  } else {
+    m_signer.get<1>().sign(currentRecord.wrapper);
+  }
   auto wrapperFullName = currentRecord.wrapper.getFullName();
   m_wrapToId.emplace(wrapperFullName, currentId);
 
@@ -689,7 +705,11 @@ Initiator::successCleanup(uint32_t id)
   signerListData.setContent(signerList.wireEncode());
   signerListData.setFreshnessPeriod(record.unsignedData->getFreshnessPeriod());
   //TODO sign?
-  m_keyChain.sign(signerListData, signingByKey(m_signingKeyName));
+  if (m_signer.index() == 0) {
+    m_signer.get<0>().first.sign(signerListData, signingByKey(m_signer.get<0>().second));
+  } else {
+    m_signer.get<1>().sign(signerListData);
+  }
 
   buildMultiSignature(*record.unsignedData, pieces);
 

@@ -664,9 +664,8 @@ BOOST_AUTO_TEST_CASE(InitiatorTest)
   signer.setSignatureVerifyCallback([](auto a) { return true; });
 
   util::DummyClientFace initiatorFace(io, m_keyChain, {true, true});
-  MpsVerifier mpsVerifier;
   Scheduler scheduler(io);
-  Initiator initiator(mpsVerifier, "/initiator", initiatorFace, scheduler, m_keyChain,
+  Initiator initiator(MpsVerifier(), "/initiator", initiatorFace, scheduler, m_keyChain,
                       m_keyChain.getPib().getIdentity("/initiator").getDefaultKey().getName());
   initiator.addSigner(signer.getSignerKeyName(), signer.getPublicKey(), "/signer");
   initiatorFace.linkTo(signerFace);
@@ -760,6 +759,8 @@ BOOST_AUTO_TEST_CASE(InitiatorTest)
                            [&](auto data_ptr, auto signerListData) {
                              const auto &content = signerListData.getContent();
                              content.parse();
+                             MpsVerifier mpsVerifier;
+                             mpsVerifier.addCert(signer.getSignerKeyName(), signer.getPublicKey());
                              BOOST_CHECK(content.get(tlv::MpsSignerList).isValid());
                              BOOST_CHECK_NO_THROW(mpsVerifier.addSignerList(signerListData.getName(),
                                                                             MpsSignerList(
