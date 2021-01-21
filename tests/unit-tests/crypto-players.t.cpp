@@ -90,6 +90,43 @@ BOOST_AUTO_TEST_CASE(TestSignerVerifierBadSig)
   BOOST_ASSERT(!verifier.verifySignature(data1, schema));
 }
 
+BOOST_AUTO_TEST_CASE(TestSignerVerifierInterest)
+{
+  MpsSigner signer("/a/b/c");
+  BOOST_CHECK_EQUAL(signer.getSignerKeyName(), WildCardName("/a/b/c"));
+  auto pub = signer.getPublicKey();
+
+  MpsVerifier verifier;
+  verifier.addCert("/a/b/c", pub);
+
+  Interest interest;
+  interest.setName(Name("/a/b/c/d"));
+  interest.setApplicationParameters(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+
+  signer.sign(interest);
+  BOOST_CHECK(verifier.verifySignature(interest));
+  BOOST_CHECK_EQUAL(interest.getSignatureValue().value_size(), blsGetSerializedSignatureByteSize());
+}
+
+BOOST_AUTO_TEST_CASE(TestSignerVerifierInterestBadSig)
+{
+  MpsSigner signer("/a/b/c");
+  BOOST_CHECK_EQUAL(signer.getSignerKeyName(), WildCardName("/a/b/c"));
+  auto pub = signer.getPublicKey();
+
+  MpsVerifier verifier;
+  verifier.addCert("/a/b/c", pub);
+
+  Interest interest;
+  interest.setName(Name("/a/b/c/d"));
+  interest.setApplicationParameters(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+
+  MpsSigner signer2("/a/b/c");
+  signer2.sign(interest);
+  BOOST_CHECK(!verifier.verifySignature(interest));
+  BOOST_CHECK_EQUAL(interest.getSignatureValue().value_size(), blsGetSerializedSignatureByteSize());
+}
+
 BOOST_AUTO_TEST_CASE(TestAggregateSignVerify)
 {
   MpsSigner signer("/a/b/c");

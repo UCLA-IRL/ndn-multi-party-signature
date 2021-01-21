@@ -6,6 +6,7 @@
 #include <iostream>
 #include <map>
 #include <ndn-cxx/data.hpp>
+#include <ndn-cxx/interest.hpp>
 
 #include "mps-signer-list.hpp"
 #include "ndnmps/schema.hpp"
@@ -79,13 +80,20 @@ public:
   getSignature(const Data& dataWithInfo) const;
 
   /**
-   * sign the packet for the packet (as the only signer).
-   * @param data the unsigned data packet
-   * @param sigInfo the signature info to be used
-   * @return the signature value signed by this signer
+   * sign the packet (as the only signer).
+   * @param data the unsigned data packet, modified to signed packet
+   * @param keyLocatorName the key name to place in key locator (if empty use this signer's name)
    */
   void
   sign(Data& data, const Name& keyLocatorName = Name()) const;
+
+  /**
+   * sign the interest packet (as the only signer).
+   * @param interest the unsigned data packet, modified to signed packet
+   * @param keyLocatorName the key name to place in key locator (if empty use this signer's name)
+   */
+  void
+  sign(Interest& interest, const Name& keyLocatorName = Name()) const;
 };
 
 /**
@@ -173,6 +181,14 @@ public:
    */
   bool
   verifySignature(const Data& data, const MultipartySchema& schema) const;
+
+  /**
+   * verify the (multi-) signature of the interest packet.
+   * @param interest the interest to be checked
+   * @return true if the verifier verifies this data's signature successfully; false otherwise
+   */
+  bool
+  verifySignature(const Interest& interest) const;
 
   /**
    * verify a signle piece of signature of the packet, from a signer.

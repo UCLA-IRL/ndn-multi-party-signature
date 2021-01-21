@@ -117,6 +117,37 @@ MpsSigner::sign(Data& data, const Name& keyLocatorName) const
   data.wireEncode();
 }
 
+void
+MpsSigner::sign(Interest& interest, const Name& keyLocatorName) const
+{
+  SignatureInfo info(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
+                     keyLocatorName.empty()? m_signerName : keyLocatorName);
+
+  interest.setSignatureInfo(info);
+  // Extract function will throw if not all necessary elements are present in Interest
+  auto buf = interest.extractSignedRanges();
+
+  blsSignature sig;
+  if (buf.size() == 1) {
+    blsSign(&sig, &m_sk, buf.at(0).first, buf.at(0).second);
+  } else {
+    EncodingBuffer encoder;
+    for (const auto& arr : buf) {
+      encoder.appendByteArray(arr.first, arr.second);
+    }
+    blsSign(&sig, &m_sk, encoder.buf(), encoder.size());
+  }
+  auto signatureBuf = make_shared<Buffer>(blsGetSerializedSignatureByteSize());
+  auto written_size = blsSignatureSerialize(signatureBuf->data(), signatureBuf->size(), &sig);
+  if (written_size == 0) {
+    NDN_THROW(std::runtime_error("Error on serializing signature"));
+  }
+  signatureBuf->resize(written_size);
+
+  interest.setSignatureValue(std::move(signatureBuf));
+  interest.wireEncode();
+}
+
 MpsVerifier::MpsVerifier()
 {
   bls_library_init();
@@ -262,6 +293,35 @@ MpsVerifier::verifySignature(const Data& data, const MultipartySchema& schema) c
   else {
     EncodingBuffer encoder;
     for (const auto& it : signedRanges) {
+      encoder.appendByteArray(it.first, it.second);
+    }
+    return blsVerify(&sig, &aggKey, encoder.buf(), encoder.size());
+  }
+}
+
+bool
+MpsVerifier::verifySignature(const Interest& interest) const {
+  const auto &sigInfo = interest.getSignatureInfo();
+  if (!sigInfo || sigInfo->getKeyLocator().getType() != tlv::Name ||
+      m_certs.count(sigInfo->getKeyLocator().getName()) == 0) {
+    return false;
+  }
+  blsPublicKey aggKey = m_certs.at(sigInfo->getKeyLocator().getName());
+
+  //get signature value
+  const auto &sigValue = interest.getSignatureValue();
+  blsSignature sig;
+  if (blsSignatureDeserialize(&sig, sigValue.value(), sigValue.value_size()) == 0)
+    return false;
+
+  //verify
+  auto signedRanges = interest.extractSignedRanges();
+  if (signedRanges.size() == 1) {  // to avoid copying in current ndn-cxx impl
+    const auto &it = signedRanges.begin();
+    return blsVerify(&sig, &aggKey, it->first, it->second);
+  } else {
+    EncodingBuffer encoder;
+    for (const auto &it : signedRanges) {
       encoder.appendByteArray(it.first, it.second);
     }
     return blsVerify(&sig, &aggKey, encoder.buf(), encoder.size());
