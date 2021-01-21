@@ -2,14 +2,15 @@
 
 #include <utility>
 
-#include "ndn-cxx/util/logger.hpp"
-#include "ndn-cxx/util/random.hpp"
+#include <ndn-cxx/util/logger.hpp>
+#include <ndn-cxx/util/random.hpp>
+#include <ndn-cxx/security/signing-helpers.hpp>
 
 namespace ndn {
 
 NDN_LOG_INIT(ndnmps.players);
 
-const time::milliseconds INTEREST_TIMEOUT = time::seconds(4);
+const time::milliseconds TIMEOUT = time::seconds(4);
 const time::milliseconds ESTIMATE_PROCESS_TIME = time::seconds(1);
 
 Signer::Signer(MpsSigner mpsSigner, const Name& prefix, Face& face)
@@ -67,15 +68,13 @@ Signer::onInvocation(const Interest& interest)
   b.parse();
   Name wrapperName;
   try {
-    for (const auto &item : b.elements()) {
-      if (item.type() == tlv::UnsignedWrapperName && wrapperName.empty()) {
-        wrapperName = Name(item.blockFromValue());
-      } else {
-        NDN_THROW(std::runtime_error("Bad element type in signer's request"));
+    if (b.elements_size() == 1 && b.get(tlv::UnsignedWrapperName).isValid()) {
+      wrapperName = Name(b.get(tlv::UnsignedWrapperName).blockFromValue());
+      if (!wrapperName.at(-1).isImplicitSha256Digest()) {
+        NDN_THROW(std::runtime_error("digest not found for data"));
       }
-    }
-    if (wrapperName.empty() || !wrapperName.at(-1).isImplicitSha256Digest()) {
-      NDN_THROW(std::runtime_error("Block Element not found"));
+    } else {
+      NDN_THROW(std::runtime_error("Block Element not found or Bad element type in signer's request"));
     }
   } catch (const std::exception &e) {
     NDN_LOG_ERROR("Got error in decoding invocation request: " << e.what());
@@ -102,7 +101,7 @@ Signer::onInvocation(const Interest& interest)
   Interest fetchInterest(wrapperName);
   fetchInterest.setCanBePrefix(false);
   fetchInterest.setMustBeFresh(true);
-  fetchInterest.setInterestLifetime(INTEREST_TIMEOUT);
+  fetchInterest.setInterestLifetime(TIMEOUT);
   m_face.expressInterest(fetchInterest,
                          [&](auto &&PH1, auto &&PH2) { onData(PH1, PH2); },
                          [&](auto &&PH1, auto &&PH2) { onNack(PH1, PH2); },
@@ -175,6 +174,7 @@ Signer::reply(const Name& interestName, ConstBufferPtr requestId) const {
     return;
   }
   data.setContent(block);
+  data.setFreshnessPeriod(TIMEOUT);
   sign(data); //TODO Sign or just digest ?
   m_face.put(data);
 }
@@ -191,6 +191,7 @@ Signer::replyError(const Name& interestName, ReplyCode errorCode) const
   }
   data.setContent(Block(tlv::Content, makeStringBlock(tlv::Status,
                                                       std::to_string(static_cast<int>(errorCode)))));
+  data.setFreshnessPeriod(TIMEOUT);
   sign(data); //TODO Sign or just digest ?
   m_face.put(data);
 }
@@ -306,7 +307,7 @@ Verifier::asyncVerifySignature(shared_ptr<const Data> data, shared_ptr<const Mul
       Interest interest(item);
       interest.setCanBePrefix(true);
       interest.setMustBeFresh(true);
-      interest.setInterestLifetime(INTEREST_TIMEOUT);
+      interest.setInterestLifetime(TIMEOUT);
       m_face.expressInterest(
               interest,
               [&](auto &&PH1, auto &&PH2) { onData(PH1, PH2); },
@@ -357,17 +358,17 @@ Verifier::onData(const Interest& interest, const Data& data)
   else {
     //signer list
     try {
-      data.getContent().parse();
-      for (const auto &item : data.getContent().elements()) {
-        if (item.type() == tlv::MpsSignerList) {
-          addSignerList(interest.getName(), MpsSignerList(item));
-          satisfyItem(interest.getName());
-          return;
-        }
+      const auto &content = data.getContent();
+      content.parse();
+      if (content.get(tlv::MpsSignerList).isValid()) {
+        addSignerList(interest.getName(), MpsSignerList(content.get(tlv::MpsSignerList)));
+        satisfyItem(interest.getName());
+        return;
+      } else {
+        removeAll(interest.getName());
+        NDN_LOG_ERROR("signer list not found in " << interest.getName());
       }
-      removeAll(interest.getName());
-      NDN_LOG_ERROR("signer list not found in " << interest.getName());
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
       NDN_LOG_ERROR("Catch error on decoding signer list packet: " << e.what());
     }
   }
@@ -444,6 +445,12 @@ Initiator::setInterestSignCallback(std::function<void(Interest&)> func)
 }
 
 void
+Initiator::setDataSignCallback(std::function<void(Data&)> func)
+{
+  m_dataSigningCallback = std::move(func);
+}
+
+void
 Initiator::addSigner(const Name& keyName, const blsPublicKey& keyValue, const Name& prefix)
 {
   if (!m_verifier.getCerts().count(keyName)) {
@@ -487,15 +494,21 @@ Initiator::multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> 
   //wrapper
   currentRecord.wrapper.setName(Name(m_prefix).append("mps").append("wrapper").append(toHex(wrapperBuf.data(), 8)));
   currentRecord.wrapper.setContent(makeNestedBlock(tlv::Content, *currentRecord.unsignedData));
+  currentRecord.wrapper.setFreshnessPeriod(TIMEOUT);
+  //TODO sign?
+  if (!m_dataSigningCallback) {
+    NDN_LOG_ERROR("No valid data signing callback");
+    return;
+  } else {
+    m_dataSigningCallback(currentRecord.wrapper);
+  }
   auto wrapperFullName = currentRecord.wrapper.getFullName();
   m_wrapToId.emplace(wrapperFullName, currentId);
 
   //send interest
   if (!m_interestSigningCallback) {
     NDN_LOG_WARN("No signing callback for initiator");
-    if (failureCb)
-      failureCb("No signing callback for initiator");
-    return;
+
   }
   for (const Name& i : keyToCheck) {
     Interest interest;
@@ -503,10 +516,10 @@ Initiator::multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> 
     Block appParam(tlv::ApplicationParameters);
     appParam.push_back(makeNestedBlock(tlv::UnsignedWrapperName, wrapperFullName));
     interest.setApplicationParameters(appParam);
-    m_interestSigningCallback(interest);
+    interest.setInterestLifetime(TIMEOUT);
+    if (m_interestSigningCallback) m_interestSigningCallback(interest);
     interest.setCanBePrefix(false);
     interest.setMustBeFresh(true);
-    interest.setInterestLifetime(INTEREST_TIMEOUT);
     m_face.expressInterest(
         interest,
         [&, currentId, i](auto&& PH1, auto&& PH2) { onData(currentId, i, PH1, PH2); },
@@ -515,7 +528,7 @@ Initiator::multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> 
   }
 
   NDN_LOG_WARN("Sent all interest to initiate sign");
-  currentRecord.eventId = m_scheduler.schedule(INTEREST_TIMEOUT + ESTIMATE_PROCESS_TIME + INTEREST_TIMEOUT,
+  currentRecord.eventId = m_scheduler.schedule(TIMEOUT + ESTIMATE_PROCESS_TIME + TIMEOUT,
                                                [&, currentId] { onSignTimeout(currentId); });
 }
 
@@ -572,12 +585,12 @@ Initiator::onData(uint32_t id, const Name& keyName, const Interest&, const Data&
         return;
       }
     }
-    m_scheduler.schedule(result_ms, [&] {
+    m_scheduler.schedule(result_ms, [&, id, keyName, resultName] {
       Interest interest;
       interest.setName(resultName);
       interest.setCanBePrefix(true);
       interest.setMustBeFresh(true);
-      interest.setInterestLifetime(INTEREST_TIMEOUT);
+      interest.setInterestLifetime(TIMEOUT);
       m_face.expressInterest(interest,
                              [&, id, keyName](auto &&PH1, auto &&PH2) { onData(id, keyName, PH1, PH2); },
                              [&, id](auto &&PH1, auto &&PH2) { onNack(id, PH1, PH2); },
@@ -599,7 +612,11 @@ Initiator::onData(uint32_t id, const Name& keyName, const Interest&, const Data&
     }
 
     auto &record = m_records.at(id);
-    m_verifier.verifySignaturePiece(*record.unsignedData, keyName, b);
+    if (!m_verifier.verifySignaturePiece(*record.unsignedData, keyName, b)) {
+      // bad signature value
+      NDN_LOG_ERROR("bad signature value from " << data.getName());
+      return;
+    }
     record.signaturePieces.emplace(keyName, sig);
     if (record.signaturePieces.size() >= record.schema.signers.size() + record.schema.minOptionalSigners) {
       std::vector<Name> successPiece(record.signaturePieces.size());
@@ -680,12 +697,20 @@ Initiator::successCleanup(uint32_t id)
   signerListData.setContent(signerList.wireEncode());
   signerListData.setFreshnessPeriod(record.unsignedData->getFreshnessPeriod());
   //TODO sign?
+  if (!m_dataSigningCallback) {
+    NDN_LOG_ERROR("No valid data signing callback");
+    return;
+  } else {
+    m_dataSigningCallback(signerListData);
+  }
 
   buildMultiSignature(*record.unsignedData, pieces);
 
   if (record.onSuccess) {
     record.onSuccess(record.unsignedData, std::move(signerListData));
   }
+
+  record.eventId.cancel();
 
   m_wrapToId.erase(record.wrapper.getFullName());
   m_records.erase(id);

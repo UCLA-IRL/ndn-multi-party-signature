@@ -59,6 +59,7 @@ BOOST_AUTO_TEST_CASE(VerifierFetch)
 
   bool finish = false;
   bool output = false;
+  advanceClocks(time::milliseconds(20), 10);
   verifier.asyncVerifySignature(data1, make_shared<MultipartySchema>(schema),
           [&](bool input){finish = true; output = input;});
 
@@ -318,6 +319,7 @@ BOOST_AUTO_TEST_CASE(SignerFetch)
   bool result2_received = false;
   bool init_received = false;
   face.onSendData.connect([&](const Data& data){
+    BOOST_CHECK(data.getFreshnessPeriod().count() > 0);
     if (Name("/signer/mps/result-of").isPrefixOf(data.getName())) {
       //result
       BOOST_CHECK_EQUAL(data.getName().size(), 5);
@@ -413,6 +415,7 @@ BOOST_AUTO_TEST_CASE(SignerFetchTimeout)
   bool result2_received = false;
   bool init_received = false;
   face.onSendData.connect([&](const Data& data){
+    BOOST_CHECK(data.getFreshnessPeriod().count() > 0);
     if (Name("/signer/mps/result-of").isPrefixOf(data.getName())) {
       //result
       BOOST_CHECK_EQUAL(data.getName().size(), 5);
@@ -483,6 +486,7 @@ BOOST_AUTO_TEST_CASE(SignerFetchNotFound)
 
   bool result1_received = false;
   face.onSendData.connect([&](const Data& data){
+    BOOST_CHECK(data.getFreshnessPeriod().count() > 0);
     if (Name("/signer/mps/result-of").isPrefixOf(data.getName())) {
       //result
       BOOST_CHECK_EQUAL(data.getName().size(), 5);
@@ -552,6 +556,7 @@ BOOST_AUTO_TEST_CASE(SignerFetchBadInit)
     const auto& content = data.getContent();
     content.parse();
     BOOST_CHECK_EQUAL(readString(content.get(tlv::Status)), std::to_string(static_cast<int>(ReplyCode::BadRequest)));
+    BOOST_CHECK(data.getFreshnessPeriod().count() > 0);
     init_received = true;
   });
 
@@ -606,6 +611,7 @@ BOOST_AUTO_TEST_CASE(SignerFetchBadWrapper)
   bool result2_received = false;
   bool init_received = false;
   face.onSendData.connect([&](const Data& data){
+    BOOST_CHECK(data.getFreshnessPeriod().count() > 0);
     if (Name("/signer/mps/result-of").isPrefixOf(data.getName())) {
       //result
       BOOST_CHECK_EQUAL(data.getName().size(), 5);
@@ -647,6 +653,495 @@ BOOST_AUTO_TEST_CASE(SignerFetchBadWrapper)
   face.receive(resultInterest);
   advanceClocks(time::milliseconds(20), 10);
   BOOST_CHECK_EQUAL(result2_received, true);
+}
+
+BOOST_AUTO_TEST_CASE(InitiatorTest)
+{
+  util::DummyClientFace signerFace(io, m_keyChain, {true, true});
+  Signer signer(MpsSigner("/a/b/c/KEY/1234"), "/signer", signerFace);
+  signer.setDataVerifyCallback([](auto a) { return true; });
+  signer.setSignatureVerifyCallback([](auto a) { return true; });
+
+  util::DummyClientFace initiatorFace(io, m_keyChain, {true, true});
+  MpsVerifier mpsVerifier;
+  Scheduler scheduler(io);
+  Initiator initiator(mpsVerifier, "/initiator", initiatorFace, scheduler);
+  initiator.addSigner(signer.getSignerKeyName(), signer.getPublicKey(), "/signer");
+  initiator.setDataSignCallback([&](Data &data) {
+    m_keyChain.sign(data, signingWithSha256());
+  });
+  initiatorFace.linkTo(signerFace);
+
+  //data to test
+  auto data1 = make_shared<Data>();
+  data1->setName(Name("/a/b/c/d"));
+  data1->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1->setFreshnessPeriod(time::seconds(1000));
+
+  MultipartySchema schema;
+  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
+
+  Name wrapperName;
+  Name resultName;
+  bool resultFetched = false;
+  bool resultReplied = false;
+
+  advanceClocks(time::milliseconds(20), 10);
+
+  signerFace.onSendInterest.connect([&](const Interest &interest) {
+    if (Name("/localhost/nfd").isPrefixOf(interest.getName())) return;
+    //process
+    if (Name("/initiator/mps/wrapper").isPrefixOf(interest.getName())) {
+      const auto &content = interest.getApplicationParameters();
+      BOOST_CHECK(!content.isValid());
+    } else {
+      std::cout << "interest: " << interest.getName() << std::endl;
+      BOOST_CHECK(false);
+    }
+  });
+
+  initiatorFace.onSendInterest.connect([&](const Interest &interest) {
+    if (Name("/localhost/nfd").isPrefixOf(interest.getName())) return;
+    //process
+    if (Name("/signer/mps/sign").isPrefixOf(interest.getName())) {
+      const auto &content = interest.getApplicationParameters();
+      content.parse();
+      BOOST_CHECK(content.get(tlv::UnsignedWrapperName).isValid());
+      BOOST_CHECK_NO_THROW(wrapperName = Name(content.get(tlv::UnsignedWrapperName).blockFromValue()));
+    } else if (Name("/signer/mps/result-of").isPrefixOf(interest.getName())) {
+      BOOST_CHECK(resultName.isPrefixOf(interest.getName()));
+      resultFetched = true;
+    } else {
+      std::cout << "interest: " << interest.getName() << std::endl;
+      BOOST_CHECK(false);
+    }
+  });
+
+  signerFace.onSendData.connect([&](const Data &data) {
+    //process
+    BOOST_CHECK(data.getFreshnessPeriod().count() > 0);
+    if (Name("/signer/mps/sign").isPrefixOf(data.getName())) {
+      const auto &content = data.getContent();
+      content.parse();
+      BOOST_CHECK(content.get(tlv::Status).isValid());
+      BOOST_CHECK(content.get(tlv::ResultName).isValid());
+      BOOST_CHECK(content.get(tlv::ResultAfter).isValid());
+      BOOST_CHECK_EQUAL(readString(content.get(tlv::Status)), std::to_string(static_cast<int>(ReplyCode::Processing)));
+      BOOST_CHECK_NO_THROW(resultName = Name(content.get(tlv::ResultName).blockFromValue()));
+    } else if (Name("/signer/mps/result-of").isPrefixOf(data.getName())) {
+      const auto &content = data.getContent();
+      content.parse();
+      BOOST_CHECK(content.get(tlv::Status).isValid());
+      BOOST_CHECK(content.get(tlv::SignatureValue).isValid());
+      BOOST_CHECK_EQUAL(readString(content.get(tlv::Status)), std::to_string(static_cast<int>(ReplyCode::OK)));
+      resultReplied = true;
+    } else {
+      std::cout << "data: " << data.getName() << std::endl;
+      BOOST_CHECK(false);
+    }
+  });
+
+  initiatorFace.onSendData.connect([&](const Data &data) {
+    //process
+    BOOST_CHECK(data.getFreshnessPeriod().count() > 0);
+    if (Name("/initiator/mps/wrapper").isPrefixOf(data.getName())) {
+      const auto &content = data.getContent();
+      content.parse();
+      BOOST_CHECK(content.get(tlv::Data).isValid());
+      BOOST_CHECK_EQUAL(content.get(tlv::Data), data1->wireEncode());
+    } else {
+      std::cout << "data: " << data.getName() << std::endl;
+      BOOST_CHECK(false);
+    }
+  });
+
+  bool success = false;
+  advanceClocks(time::milliseconds(20), 10);
+  initiator.multiPartySign(schema, data1,
+                           [&](auto data_ptr, auto signerListData) {
+                             const auto &content = signerListData.getContent();
+                             content.parse();
+                             BOOST_CHECK(content.get(tlv::MpsSignerList).isValid());
+                             BOOST_CHECK_NO_THROW(mpsVerifier.addSignerList(signerListData.getName(),
+                                                                            MpsSignerList(
+                                                                                    content.get(tlv::MpsSignerList))));
+                             BOOST_CHECK(mpsVerifier.verifySignature(*data_ptr, schema));
+                             success = true;
+                           },
+                           [](auto reason) { BOOST_CHECK(false); });
+  advanceClocks(time::milliseconds(20), 10);
+  BOOST_CHECK(!wrapperName.empty());
+  BOOST_CHECK(!resultName.empty());
+  advanceClocks(time::milliseconds(20), 55);
+  BOOST_CHECK(resultFetched);
+  BOOST_CHECK(resultReplied);
+  BOOST_CHECK_EQUAL(success, true);
+  BOOST_CHECK(!wrapperName.empty());
+}
+
+BOOST_AUTO_TEST_CASE(InitiatorTestTimeout)
+{
+  MpsSigner signer("/a/b/c/KEY/1234");
+
+  util::DummyClientFace initiatorFace(io, m_keyChain, {true, true});
+  MpsVerifier mpsVerifier;
+  Scheduler scheduler(io);
+  Initiator initiator(mpsVerifier, "/initiator", initiatorFace, scheduler);
+  initiator.addSigner(signer.getSignerKeyName(), signer.getPublicKey(), "/signer");
+  initiator.setDataSignCallback([&](Data &data) {
+    m_keyChain.sign(data, signingWithSha256());
+  });
+
+  //data to test
+  auto data1 = make_shared<Data>();
+  data1->setName(Name("/a/b/c/d"));
+  data1->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1->setFreshnessPeriod(time::seconds(1000));
+
+  MultipartySchema schema;
+  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
+
+  Name wrapperName;
+
+  advanceClocks(time::milliseconds(20), 10);
+
+  initiatorFace.onSendInterest.connect([&](const Interest& interest){
+    if (Name("/localhost/nfd").isPrefixOf(interest.getName())) return;
+    //process
+    if (Name("/signer/mps/sign").isPrefixOf(interest.getName())) {
+      const auto& content = interest.getApplicationParameters();
+      content.parse();
+      BOOST_CHECK(content.get(tlv::UnsignedWrapperName).isValid());
+      BOOST_CHECK_NO_THROW(wrapperName = Name(content.get(tlv::UnsignedWrapperName).blockFromValue()));
+    } else {
+      std::cout << "interest: " << interest.getName() << std::endl;
+    }
+  });
+
+  initiatorFace.onSendData.connect([&](const Data& data){
+    //process
+    BOOST_CHECK(data.getFreshnessPeriod().count() > 0);
+    BOOST_CHECK(false);
+  });
+
+  bool failure = false;
+  advanceClocks(time::milliseconds(20), 10);
+  initiator.multiPartySign(schema, data1,
+                           [](auto data_ptr, auto signerListData){
+                             BOOST_CHECK(false);
+                           },
+                           [&](auto reason){failure = true;});
+  advanceClocks(time::milliseconds(20), 10);
+  BOOST_CHECK(!wrapperName.empty());
+  advanceClocks(time::milliseconds(100), 100);
+  BOOST_CHECK_EQUAL(failure, true);
+}
+
+BOOST_AUTO_TEST_CASE(InitiatorTestUnauthorized)
+{
+  util::DummyClientFace signerFace(io, m_keyChain, {true, true});
+  Signer signer(MpsSigner("/a/b/c/KEY/1234"), "/signer", signerFace);
+  signer.setDataVerifyCallback([](auto a) { return true; });
+  signer.setSignatureVerifyCallback([](auto a) { return false; });
+
+  util::DummyClientFace initiatorFace(io, m_keyChain, {true, true});
+  MpsVerifier mpsVerifier;
+  Scheduler scheduler(io);
+  Initiator initiator(mpsVerifier, "/initiator", initiatorFace, scheduler);
+  initiator.addSigner(signer.getSignerKeyName(), signer.getPublicKey(), "/signer");
+  initiator.setDataSignCallback([&](Data &data) {
+    m_keyChain.sign(data, signingWithSha256());
+  });
+  initiatorFace.linkTo(signerFace);
+
+  //data to test
+  auto data1 = make_shared<Data>();
+  data1->setName(Name("/a/b/c/d"));
+  data1->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1->setFreshnessPeriod(time::seconds(1000));
+
+  MultipartySchema schema;
+  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
+
+  Name wrapperName;
+  bool replied = false;
+
+  advanceClocks(time::milliseconds(20), 10);
+
+  initiatorFace.onSendInterest.connect([&](const Interest &interest) {
+    if (Name("/localhost/nfd").isPrefixOf(interest.getName())) return;
+    //process
+    if (Name("/signer/mps/sign").isPrefixOf(interest.getName())) {
+      const auto &content = interest.getApplicationParameters();
+      content.parse();
+      BOOST_CHECK(content.get(tlv::UnsignedWrapperName).isValid());
+      BOOST_CHECK_NO_THROW(wrapperName = Name(content.get(tlv::UnsignedWrapperName).blockFromValue()));
+    } else {
+      std::cout << "interest: " << interest.getName() << std::endl;
+      BOOST_CHECK(false);
+    }
+  });
+
+  signerFace.onSendData.connect([&](const Data &data) {
+    //process
+    BOOST_CHECK(data.getFreshnessPeriod().count() > 0);
+    if (Name("/signer/mps/sign").isPrefixOf(data.getName())) {
+      const auto &content = data.getContent();
+      content.parse();
+      BOOST_CHECK(content.get(tlv::Status).isValid());
+      BOOST_CHECK_EQUAL(readString(content.get(tlv::Status)), std::to_string(static_cast<int>(ReplyCode::Unauthorized)));
+      replied = true;
+    } else {
+      std::cout << "data: " << data.getName() << std::endl;
+      BOOST_CHECK(false);
+    }
+  });
+
+  bool failure = false;
+  advanceClocks(time::milliseconds(20), 10);
+  initiator.multiPartySign(schema, data1,
+                           [&](auto data_ptr, auto signerListData) {
+                             BOOST_CHECK(false);
+                           },
+                           [&](auto reason) { failure = true; });
+  advanceClocks(time::milliseconds(20), 10);
+  BOOST_CHECK(!wrapperName.empty());
+  BOOST_CHECK(replied);
+  advanceClocks(time::milliseconds(100), 100);
+  BOOST_CHECK_EQUAL(failure, true);
+}
+
+BOOST_AUTO_TEST_CASE(InitiatorTestDataVerifyFail)
+{
+  util::DummyClientFace signerFace(io, m_keyChain, {true, true});
+  Signer signer(MpsSigner("/a/b/c/KEY/1234"), "/signer", signerFace);
+  signer.setDataVerifyCallback([](auto a) { return false; });
+  signer.setSignatureVerifyCallback([](auto a) { return true; });
+
+  util::DummyClientFace initiatorFace(io, m_keyChain, {true, true});
+  MpsVerifier mpsVerifier;
+  Scheduler scheduler(io);
+  Initiator initiator(mpsVerifier, "/initiator", initiatorFace, scheduler);
+  initiator.addSigner(signer.getSignerKeyName(), signer.getPublicKey(), "/signer");
+  initiator.setDataSignCallback([&](Data &data) {
+    m_keyChain.sign(data, signingWithSha256());
+  });
+  initiatorFace.linkTo(signerFace);
+
+  //data to test
+  auto data1 = make_shared<Data>();
+  data1->setName(Name("/a/b/c/d"));
+  data1->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1->setFreshnessPeriod(time::seconds(1000));
+
+  MultipartySchema schema;
+  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
+
+  Name wrapperName;
+  Name resultName;
+  bool resultFetched = false;
+  bool resultReplied = false;
+
+  advanceClocks(time::milliseconds(20), 10);
+
+  signerFace.onSendInterest.connect([&](const Interest &interest) {
+    if (Name("/localhost/nfd").isPrefixOf(interest.getName())) return;
+    //process
+    if (Name("/initiator/mps/wrapper").isPrefixOf(interest.getName())) {
+      const auto &content = interest.getApplicationParameters();
+      BOOST_CHECK(!content.isValid());
+    } else {
+      std::cout << "interest: " << interest.getName() << std::endl;
+      BOOST_CHECK(false);
+    }
+  });
+
+  initiatorFace.onSendInterest.connect([&](const Interest &interest) {
+    if (Name("/localhost/nfd").isPrefixOf(interest.getName())) return;
+    //process
+    if (Name("/signer/mps/sign").isPrefixOf(interest.getName())) {
+      const auto &content = interest.getApplicationParameters();
+      content.parse();
+      BOOST_CHECK(content.get(tlv::UnsignedWrapperName).isValid());
+      BOOST_CHECK_NO_THROW(wrapperName = Name(content.get(tlv::UnsignedWrapperName).blockFromValue()));
+    } else if (Name("/signer/mps/result-of").isPrefixOf(interest.getName())) {
+      BOOST_CHECK(resultName.isPrefixOf(interest.getName()));
+      resultFetched = true;
+    } else {
+      std::cout << "interest: " << interest.getName() << std::endl;
+      BOOST_CHECK(false);
+    }
+  });
+
+  signerFace.onSendData.connect([&](const Data &data) {
+    //process
+    BOOST_CHECK(data.getFreshnessPeriod().count() > 0);
+    if (Name("/signer/mps/sign").isPrefixOf(data.getName())) {
+      const auto &content = data.getContent();
+      content.parse();
+      BOOST_CHECK(content.get(tlv::Status).isValid());
+      BOOST_CHECK(content.get(tlv::ResultName).isValid());
+      BOOST_CHECK(content.get(tlv::ResultAfter).isValid());
+      BOOST_CHECK_EQUAL(readString(content.get(tlv::Status)), std::to_string(static_cast<int>(ReplyCode::Processing)));
+      BOOST_CHECK_NO_THROW(resultName = Name(content.get(tlv::ResultName).blockFromValue()));
+    } else if (Name("/signer/mps/result-of").isPrefixOf(data.getName())) {
+      const auto &content = data.getContent();
+      content.parse();
+      BOOST_CHECK(content.get(tlv::Status).isValid());
+      BOOST_CHECK_EQUAL(readString(content.get(tlv::Status)), std::to_string(static_cast<int>(ReplyCode::Unauthorized)));
+      resultReplied = true;
+    } else {
+      std::cout << "data: " << data.getName() << std::endl;
+      BOOST_CHECK(false);
+    }
+  });
+
+  initiatorFace.onSendData.connect([&](const Data &data) {
+    //process
+    BOOST_CHECK(data.getFreshnessPeriod().count() > 0);
+    if (Name("/initiator/mps/wrapper").isPrefixOf(data.getName())) {
+      const auto &content = data.getContent();
+      content.parse();
+      BOOST_CHECK(content.get(tlv::Data).isValid());
+      BOOST_CHECK_EQUAL(content.get(tlv::Data), data1->wireEncode());
+    } else {
+      std::cout << "data: " << data.getName() << std::endl;
+      BOOST_CHECK(false);
+    }
+  });
+
+  bool failure = false;
+  advanceClocks(time::milliseconds(20), 10);
+  initiator.multiPartySign(schema, data1,
+                           [&](auto data_ptr, auto signerListData) {
+                             BOOST_CHECK(false);
+                           },
+                           [&](auto reason) { failure = true; });
+  advanceClocks(time::milliseconds(20), 10);
+  BOOST_CHECK(!wrapperName.empty());
+  BOOST_CHECK(!resultName.empty());
+  advanceClocks(time::milliseconds(100), 100);
+  BOOST_CHECK(resultFetched);
+  BOOST_CHECK(resultReplied);
+  BOOST_CHECK_EQUAL(failure, true);
+}
+
+BOOST_AUTO_TEST_CASE(InitiatorTestBadSignature)
+{
+  util::DummyClientFace signerFace(io, m_keyChain, {true, true});
+  Signer signer(MpsSigner("/a/b/c/KEY/1234"), "/signer", signerFace);
+  signer.setDataVerifyCallback([](auto a) { return true; });
+  signer.setSignatureVerifyCallback([](auto a) { return true; });
+
+  BOOST_CHECK(!blsPublicKeyIsEqual(&signer.getPublicKey(), &MpsSigner("/a/b/c/KEY/1234").getPublicKey()));
+
+  util::DummyClientFace initiatorFace(io, m_keyChain, {true, true});
+  MpsVerifier mpsVerifier;
+  Scheduler scheduler(io);
+  Initiator initiator(mpsVerifier, "/initiator", initiatorFace, scheduler);
+  initiator.addSigner(signer.getSignerKeyName(), MpsSigner("/a/b/c/KEY/1234").getPublicKey(), "/signer"); // bad key
+  initiator.setDataSignCallback([&](Data &data) {
+    m_keyChain.sign(data, signingWithSha256());
+  });
+  initiatorFace.linkTo(signerFace);
+
+  //data to test
+  auto data1 = make_shared<Data>();
+  data1->setName(Name("/a/b/c/d"));
+  data1->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1->setFreshnessPeriod(time::seconds(1000));
+
+  MultipartySchema schema;
+  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
+
+  Name wrapperName;
+  Name resultName;
+  bool resultFetched = false;
+  bool resultReplied = false;
+
+  advanceClocks(time::milliseconds(20), 10);
+
+  signerFace.onSendInterest.connect([&](const Interest &interest) {
+    if (Name("/localhost/nfd").isPrefixOf(interest.getName())) return;
+    //process
+    if (Name("/initiator/mps/wrapper").isPrefixOf(interest.getName())) {
+      const auto &content = interest.getApplicationParameters();
+      BOOST_CHECK(!content.isValid());
+    } else {
+      std::cout << "interest: " << interest.getName() << std::endl;
+      BOOST_CHECK(false);
+    }
+  });
+
+  initiatorFace.onSendInterest.connect([&](const Interest &interest) {
+    if (Name("/localhost/nfd").isPrefixOf(interest.getName())) return;
+    //process
+    if (Name("/signer/mps/sign").isPrefixOf(interest.getName())) {
+      const auto &content = interest.getApplicationParameters();
+      content.parse();
+      BOOST_CHECK(content.get(tlv::UnsignedWrapperName).isValid());
+      BOOST_CHECK_NO_THROW(wrapperName = Name(content.get(tlv::UnsignedWrapperName).blockFromValue()));
+    } else if (Name("/signer/mps/result-of").isPrefixOf(interest.getName())) {
+      BOOST_CHECK(resultName.isPrefixOf(interest.getName()));
+      resultFetched = true;
+    } else {
+      std::cout << "interest: " << interest.getName() << std::endl;
+      BOOST_CHECK(false);
+    }
+  });
+
+  signerFace.onSendData.connect([&](const Data &data) {
+    //process
+    BOOST_CHECK(data.getFreshnessPeriod().count() > 0);
+    if (Name("/signer/mps/sign").isPrefixOf(data.getName())) {
+      const auto &content = data.getContent();
+      content.parse();
+      BOOST_CHECK(content.get(tlv::Status).isValid());
+      BOOST_CHECK(content.get(tlv::ResultName).isValid());
+      BOOST_CHECK(content.get(tlv::ResultAfter).isValid());
+      BOOST_CHECK_EQUAL(readString(content.get(tlv::Status)), std::to_string(static_cast<int>(ReplyCode::Processing)));
+      BOOST_CHECK_NO_THROW(resultName = Name(content.get(tlv::ResultName).blockFromValue()));
+    } else if (Name("/signer/mps/result-of").isPrefixOf(data.getName())) {
+      const auto &content = data.getContent();
+      content.parse();
+      BOOST_CHECK(content.get(tlv::Status).isValid());
+      BOOST_CHECK(content.get(tlv::SignatureValue).isValid());
+      BOOST_CHECK_EQUAL(readString(content.get(tlv::Status)), std::to_string(static_cast<int>(ReplyCode::OK)));
+      resultReplied = true;
+    } else {
+      std::cout << "data: " << data.getName() << std::endl;
+      BOOST_CHECK(false);
+    }
+  });
+
+  initiatorFace.onSendData.connect([&](const Data &data) {
+    //process
+    BOOST_CHECK(data.getFreshnessPeriod().count() > 0);
+    if (Name("/initiator/mps/wrapper").isPrefixOf(data.getName())) {
+      const auto &content = data.getContent();
+      content.parse();
+      BOOST_CHECK(content.get(tlv::Data).isValid());
+      BOOST_CHECK_EQUAL(content.get(tlv::Data), data1->wireEncode());
+    } else {
+      std::cout << "data: " << data.getName() << std::endl;
+      BOOST_CHECK(false);
+    }
+  });
+
+  bool failure = false;
+  advanceClocks(time::milliseconds(20), 10);
+  initiator.multiPartySign(schema, data1,
+                           [&](auto data_ptr, auto signerListData) {
+                             BOOST_CHECK(false);
+                           },
+                           [&](auto reason) { failure = true; });
+  advanceClocks(time::milliseconds(20), 10);
+  BOOST_CHECK(!wrapperName.empty());
+  BOOST_CHECK(!resultName.empty());
+  advanceClocks(time::milliseconds(100), 100);
+  BOOST_CHECK(resultFetched);
+  BOOST_CHECK(resultReplied);
+  BOOST_CHECK_EQUAL(failure, true);
 }
 
 

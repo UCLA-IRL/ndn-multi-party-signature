@@ -24,7 +24,6 @@ enum : uint32_t {
   MpsSignerList = 200,
   Status = 203,
   UnsignedWrapperName = 205,
-  SignerListName = 207,
   ResultAfter = 209,
   ResultName = 211,
 };

@@ -118,8 +118,8 @@ private:
   struct InitiationRecord {
     const MultipartySchema& schema;
     std::shared_ptr<Data> unsignedData;
-    const SignatureFinishCallback& onSuccess;
-    const SignatureFailureCallback& onFailure;
+    SignatureFinishCallback onSuccess;
+    SignatureFailureCallback onFailure;
     Data wrapper;
     std::map<Name, blsSignature> signaturePieces;
     scheduler::EventId eventId;
@@ -128,13 +128,14 @@ private:
   };
   MpsVerifier& m_verifier;
   Face& m_face;
+  const Name m_prefix;
   Scheduler& m_scheduler;
   std::map<Name, Name> m_keyToPrefix;
-  const Name m_prefix;
   optional<RegisteredPrefixHandle> m_handle;
   std::map<uint32_t, InitiationRecord> m_records;
   std::map<Name, uint32_t> m_wrapToId;
   std::function<void(Interest&)> m_interestSigningCallback;
+  std::function<void(Data&)> m_dataSigningCallback;
 
 public:
   Initiator(MpsVerifier& verifier, const Name& prefix, Face& face, Scheduler& scheduler);
@@ -148,6 +149,8 @@ public:
 
   void
   setInterestSignCallback(std::function<void(Interest&)> func);
+  void
+  setDataSignCallback(std::function<void(Data&)> func);
 
   void
   multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> unfinishedData,
@@ -158,7 +161,7 @@ private:
   onWrapperFetch(const Interest&);
 
   void
-  onData(uint32_t id, const Name& keyName, const Interest&, const Data& data);
+  onData(uint32_t id, const Name &keyName, const Interest&, const Data& data);
 
   void
   onNack(uint32_t id, const Interest&, const lp::Nack& nack);
