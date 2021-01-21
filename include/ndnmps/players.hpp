@@ -13,7 +13,10 @@
 
 namespace ndn {
 
-// TODO players that handles all protocols and network interactions
+/**
+ * The signer class class that handles functionality in the multi-signing protocol.
+ * Note that it is different from MpsSigner, which only provides signing and packet encoding.
+ */
 class Signer : public MpsSigner {
 private:
   Name m_prefix;
@@ -32,14 +35,30 @@ private:
   std::map<Name, Buffer> m_unsignedNames;
 public:
   /**
-   * @brief Generate public and secret key pair.
+   * Construct the signer participant in the protocol
+   * @param mpsSigner the signer that signs data
+   * @param prefix the routable prefix to register prefix to
+   * @param face the network interface.
    */
   Signer(MpsSigner mpsSigner, const Name& prefix, Face& face);
 
+  /**
+   * the destructor. Currently remove the prefix registration.
+   */
   virtual ~Signer();
 
+  /**
+   * Set the behavior when verifying the unsigned data.
+   * Default to returning false at all time.
+   * @param func the function to be called when verifying a unsigned data for endorsement.
+   */
   void
   setDataVerifyCallback(const function<bool(const Data&)>& func);
+
+  /**
+   * Set the behavior when verifying the signature from the initiator
+   * @param func the function to verify the initiator signature.
+   */
   void
   setSignatureVerifyCallback(const function<bool(const Interest&)>& func);
 
@@ -71,6 +90,10 @@ private:
 
 typedef function<void(bool)> VerifyFinishCallback;
 
+/**
+ * The class for verifier, which will fetch the unknown data.
+ * Note that this is different from MpsVerifier, which will not fetch the data from network.
+ */
 class Verifier : public MpsVerifier {
 private:
   struct VerificationRecord {
@@ -85,11 +108,26 @@ private:
   function<bool(const Data&)> m_certVerifyCallback;
 
 public:
+  /**
+   * Construct the verifier.
+   * @param v the MpsVerifier to use that contains initial key chain.
+   * @param face the network interface.
+   */
   Verifier(MpsVerifier v, Face& face);
 
+  /**
+   * set the behavior when received a new certificate.
+   * @param func the function to call to verify the new certificate.
+   */
   void
   setCertVerifyCallback(const function<bool(const Data&)>& func);
 
+  /**
+   * Asynchronously verifies the signature of a data.
+   * @param data the data to be verified.
+   * @param schema the trust schema to verify against.
+   * @param callback the callback then the verification finished. It will be called eventually.
+   */
   void
   asyncVerifySignature(shared_ptr<const Data> data, shared_ptr<const MultipartySchema> schema, const VerifyFinishCallback& callback);
 
@@ -113,6 +151,9 @@ private:
 typedef function<void(std::shared_ptr<Data> data, Data signerListData)> SignatureFinishCallback;
 typedef function<void(const std::string& reason)> SignatureFailureCallback;
 
+/**
+ * The initiator class for the multisigning protocol.
+ */
 class Initiator : public MpsAggregater {
 private:
   struct InitiationRecord {
@@ -137,22 +178,66 @@ private:
   std::function<void(Interest&)> m_interestSigningCallback;
   variant<std::pair<KeyChain&, Name>, MpsSigner> m_signer;
 public:
+
+  /**
+   * Construct the initiator. The data are signed with NDN-cxx keychain.
+   * @param verifier the verifier to verify the signature piece.
+   * @param prefix the routable prefix for this initiator
+   * @param face the network interface.
+   * @param scheduler the scheduler to schedule timer events.
+   * @param keyChain the NDN-cxx keychain for signing data.
+   * @param signingKeyName the signing key name to be used.
+   */
   Initiator(const MpsVerifier& verifier, const Name& prefix, Face& face, Scheduler& scheduler,
             KeyChain& keyChain, const Name& signingKeyName);
 
+  /**
+   * Construct the initiator. The data are signed with BLS/MPS signer
+   * @param verifier the verifier to verify the signature piece.
+   * @param prefix the routable prefix for this initiator
+   * @param face the network interface.
+   * @param scheduler the scheduler to schedule timer events.
+   * @param dataSigner the BLS/MPS signer to sign the data.
+   */
   Initiator(const MpsVerifier& verifier, const Name& prefix, Face& face, Scheduler& scheduler,
             const MpsSigner& dataSigner);
+
+  /**
+   * The destructor. Currently remove the prefix registered.
+   */
   virtual ~Initiator();
 
+  /**
+   * Add the routing prefix of signer. the public key need to be already in the verifier chain.
+   * @param keyName the key name of the signer.
+   * @param prefix the routable prefix of the signer.
+   */
   void
   addSigner(const Name& keyName, const Name& prefix);
 
+  /**
+   * Add the routing prefix of signer. Used for also add public key to internal verifier chain
+   * @param keyName the key name of the signer.
+   * @param keyValue the public key of the signer.
+   * @param prefix the routable prefix of the signer.
+   */
   void
   addSigner(const Name& keyName, const blsPublicKey& keyValue, const Name& prefix);
 
+  /**
+   * Set the behavior to sign the interest to signer.
+   * @param func the function to be called when signing interest.
+   */
   void
   setInterestSignCallback(std::function<void(Interest&)> func);
 
+  /**
+   * Initiate the multi-party signing.
+   * @param schema the schema to satisfy with the signature.
+   * @param unfinishedData the unsigned data to be (multi-) signed.
+   * @param successCb the callback then the data finished signing. Also returns the signer list.
+   * @param failureCb the callback then the data failed to be signed. the reason will be returned.
+   */
   void
   multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> unfinishedData,
                  const SignatureFinishCallback& successCb, const SignatureFailureCallback& failureCb);
