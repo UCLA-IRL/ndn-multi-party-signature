@@ -12,6 +12,11 @@
 
 namespace ndn {
 
+/**
+ * The signer class for maintaining secret/public key pair, sign and encode data packet.
+ * Note that is is different from Signer from players.hpp as the other primary provides functionality
+ * for signing protocol.
+ */
 class MpsSigner {
 private:
   Name m_signerName;
@@ -83,6 +88,11 @@ public:
   sign(Data& data, const Name& keyLocatorName = Name()) const;
 };
 
+/**
+ * The verifies class for maintaining public keys and signer lists, decode and verifies data packet.
+ * Note that is is different from Verifier from players.hpp as the other primary provides functionality
+ * for signing protocol.
+ */
 class MpsVerifier {
 private:
   std::map<Name, blsPublicKey> m_certs;
@@ -186,6 +196,9 @@ public:
   verifySignaturePiece(const Data& dataWithInfo, const Name& signedBy, const Block& signaturePiece) const;
 };
 
+/**
+ * The aggregater class for aggregating the signature piece.
+ */
 class MpsAggregater {
 public:
   /**

@@ -116,7 +116,7 @@ typedef function<void(const std::string& reason)> SignatureFailureCallback;
 class Initiator : public MpsAggregater {
 private:
   struct InitiationRecord {
-    const MultipartySchema& schema;
+    const MultipartySchema schema;
     std::shared_ptr<Data> unsignedData;
     SignatureFinishCallback onSuccess;
     SignatureFailureCallback onFailure;
