@@ -33,17 +33,34 @@ public:  // constructors
   MpsSignerList(const Block& wire);
 
 public:
+  /**
+   * Encode the signer list to a block
+   * @return the corresponding block from signer list
+   */
   Block
   wireEncode() const;
 
+  /**
+   * Decode the signer list from a block
+   * @param wire the block to decode from
+   */
   void
   wireDecode(const Block& wire);
 
+  /**
+   * Encode the signer list as a block into a encoder
+   * @param encoder the block to be encoded
+   */
   template <encoding::Tag TAG>
   size_t
   wireEncode(EncodingImpl<TAG>& encoder) const;
 
 public:
+  /**
+   * Compare the signer list. The comparison returns true if both side have the same names.
+   * @param rhs the other side of comparison
+   * @return true of both side have the same set of names.
+   */
   bool
   operator==(const MpsSignerList& rhs) {
     std::vector<Name> nameList(this->begin(), this->end());

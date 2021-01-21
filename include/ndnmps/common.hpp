@@ -20,6 +20,9 @@
 namespace ndn {
 namespace tlv {
 
+/**
+ * Custom tlv types for Multi-signature protocol packet encoding
+ */
 enum : uint32_t {
   MpsSignerList = 200,
   Status = 203,
@@ -39,6 +42,9 @@ std::ostream&
 operator<<(std::ostream& os, MpsSignatureTypeValue st);
 }  // namespace tlv
 
+/**
+ * The HTTP-like reply status code for Multi-signature protocol packet encoding
+ */
 enum class ReplyCode : int {
   Processing = 102,
   OK = 200,
