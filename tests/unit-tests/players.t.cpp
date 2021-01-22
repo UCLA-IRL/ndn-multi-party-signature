@@ -904,7 +904,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTestUnauthorized)
   advanceClocks(time::milliseconds(20), 10);
   BOOST_CHECK(!wrapperName.empty());
   BOOST_CHECK(replied);
-  advanceClocks(time::milliseconds(100), 100);
+  advanceClocks(time::milliseconds(100), 10);
   BOOST_CHECK_EQUAL(failure, true);
 }
 
@@ -1016,7 +1016,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTestDataVerifyFail)
   advanceClocks(time::milliseconds(20), 10);
   BOOST_CHECK(!wrapperName.empty());
   BOOST_CHECK(!resultName.empty());
-  advanceClocks(time::milliseconds(100), 100);
+  advanceClocks(time::milliseconds(100), 10);
   BOOST_CHECK(resultFetched);
   BOOST_CHECK(resultReplied);
   BOOST_CHECK_EQUAL(failure, true);
@@ -1133,7 +1133,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTestBadSignature)
   advanceClocks(time::milliseconds(20), 10);
   BOOST_CHECK(!wrapperName.empty());
   BOOST_CHECK(!resultName.empty());
-  advanceClocks(time::milliseconds(100), 100);
+  advanceClocks(time::milliseconds(100), 10);
   BOOST_CHECK(resultFetched);
   BOOST_CHECK(resultReplied);
   BOOST_CHECK_EQUAL(failure, true);

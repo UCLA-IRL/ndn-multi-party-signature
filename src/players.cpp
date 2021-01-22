@@ -486,6 +486,7 @@ Initiator::multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> 
   uint32_t currentId = random::generateSecureWord32();
   m_records.emplace(currentId, InitiationRecord(schema, std::move(unfinishedData), successCb, failureCb));
   auto& currentRecord = m_records.at(currentId);
+  currentRecord.availableKeys = std::move(keyToCheck);
 
   //build signature info packet
   std::array<uint8_t, 8> wrapperBuf = {};
@@ -508,7 +509,7 @@ Initiator::multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> 
   m_wrapToId.emplace(wrapperFullName, currentId);
 
   //send interest
-  for (const Name& i : keyToCheck) {
+  for (const Name& i : currentRecord.availableKeys) {
     Interest interest;
     interest.setName(Name(m_keyToPrefix.at(i)).append("mps").append("sign"));
     Block appParam(tlv::ApplicationParameters);
@@ -524,9 +525,9 @@ Initiator::multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> 
     interest.setMustBeFresh(true);
     m_face.expressInterest(
         interest,
-        [&, currentId, i](auto&& PH1, auto&& PH2) { onData(currentId, i, PH1, PH2); },
-        [&, currentId](auto&& PH1, auto&& PH2) { onNack(currentId, PH1, PH2); },
-        [&, currentId](auto&& PH1) { onTimeout(currentId, PH1); });
+        [&, currentId, i](auto&& PH1, auto&& PH2) { onData(currentId, i, PH2); },
+        [&, currentId, i](auto&& PH1, auto&& PH2) { onNack(currentId, i, PH1, PH2); },
+        [&, currentId, i](auto&& PH1) { onTimeout(currentId, i, PH1); });
   }
 
   NDN_LOG_WARN("Sent all interest to initiate sign");
@@ -554,7 +555,7 @@ Initiator::onWrapperFetch(const Interest& interest)
 }
 
 void
-Initiator::onData(uint32_t id, const Name& keyName, const Interest&, const Data& data) {
+Initiator::onData(uint32_t id, const Name& keyName, const Data& data) {
   if (m_records.count(id) == 0) return;
   const auto &content = data.getContent();
   content.parse();
@@ -575,6 +576,7 @@ Initiator::onData(uint32_t id, const Name& keyName, const Interest&, const Data&
     Name resultName;
     if (!resultAtBlock.isValid()) {
       NDN_LOG_ERROR("Signer processing but no result name replied: data for" << data.getName());
+      keyLossTimeout(id, keyName);
       return;
     } else {
       try {
@@ -584,6 +586,7 @@ Initiator::onData(uint32_t id, const Name& keyName, const Interest&, const Data&
         }
       } catch (const std::exception &e) {
         NDN_LOG_ERROR("Signer processing but bad result name replied: data for" << data.getName());
+        keyLossTimeout(id, keyName);
         return;
       }
     }
@@ -594,9 +597,9 @@ Initiator::onData(uint32_t id, const Name& keyName, const Interest&, const Data&
       interest.setMustBeFresh(true);
       interest.setInterestLifetime(TIMEOUT);
       m_face.expressInterest(interest,
-                             [&, id, keyName](auto &&PH1, auto &&PH2) { onData(id, keyName, PH1, PH2); },
-                             [&, id](auto &&PH1, auto &&PH2) { onNack(id, PH1, PH2); },
-                             [&, id](auto &&PH1) { onTimeout(id, PH1); });
+                             [&, id, keyName](auto &&PH1, auto &&PH2) { onData(id, keyName, PH2); },
+                             [&, id, keyName](auto &&PH1, auto &&PH2) { onNack(id, keyName, PH1, PH2); },
+                             [&, id, keyName](auto &&PH1) { onTimeout(id, keyName, PH1); });
     });
   } else if (status == ReplyCode::OK) {
     // add to record, may call success
@@ -604,12 +607,14 @@ Initiator::onData(uint32_t id, const Name& keyName, const Interest&, const Data&
     const Block &b = content.get(tlv::SignatureValue);
     if (!b.isValid()) {
       NDN_LOG_ERROR("Signer OK but bad signature value decoding failed: data for" << data.getName());
+      keyLossTimeout(id, keyName);
       return;
     }
     blsSignature sig;
     int re = blsSignatureDeserialize(&sig, b.value(), b.value_size());
     if (re == 0) {
       NDN_LOG_ERROR("Signer OK but bad signature value decoding failed: data for" << data.getName());
+      keyLossTimeout(id, keyName);
       return;
     }
 
@@ -617,6 +622,7 @@ Initiator::onData(uint32_t id, const Name& keyName, const Interest&, const Data&
     if (!m_verifier.verifySignaturePiece(*record.unsignedData, keyName, b)) {
       // bad signature value
       NDN_LOG_ERROR("bad signature value from " << data.getName());
+      keyLossTimeout(id, keyName);
       return;
     }
     record.signaturePieces.emplace(keyName, sig);
@@ -632,20 +638,23 @@ Initiator::onData(uint32_t id, const Name& keyName, const Interest&, const Data&
     }
   } else {
     NDN_LOG_ERROR("Signer replied status: " << static_cast<int>(status) << "For interest " << data.getName());
+    keyLossTimeout(id, keyName);
     return;
   }
 }
 
 void
-Initiator::onNack(uint32_t id, const Interest& interest, const lp::Nack& nack)
+Initiator::onNack(uint32_t id, const Name &keyName, const Interest& interest, const lp::Nack& nack)
 {
   NDN_LOG_ERROR("NACK on interest " << interest.getName() << "For id " << id << " With reason " << nack.getReason());
+  keyLossTimeout(id, keyName);
 }
 
 void
-Initiator::onTimeout(uint32_t id, const Interest& interest)
+Initiator::onTimeout(uint32_t id, const Name &keyName, const Interest& interest)
 {
   NDN_LOG_ERROR("Timeout on interest " << interest.getName() << "For id " << id);
+  keyLossTimeout(id, keyName);
 }
 
 void
@@ -714,6 +723,28 @@ Initiator::successCleanup(uint32_t id)
 
   m_wrapToId.erase(record.wrapper.getFullName());
   m_records.erase(id);
+}
+
+void
+Initiator::keyLossTimeout(uint32_t id, const Name& keyName)
+{
+  if (m_records.count(id) == 0)
+    return;
+  auto& record = m_records.at(id);
+
+  auto it = std::find(record.availableKeys.begin(), record.availableKeys.end(), keyName);
+  if (it == record.availableKeys.end()) {
+    return;
+  }
+
+  //erase it
+  record.availableKeys.erase(it);
+  if (record.schema.getMinSigners(record.availableKeys).empty()) {
+    //failure
+    record.onFailure(std::string("Too many signer refused to sign"));
+    NDN_LOG_ERROR("Too many signer refused to sign " << record.unsignedData->getName());
+    m_records.erase(id);
+  }
 }
 
 }  // namespace ndn

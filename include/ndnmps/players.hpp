@@ -163,6 +163,7 @@ private:
     SignatureFailureCallback onFailure;
     Data wrapper;
     std::map<Name, blsSignature> signaturePieces;
+    std::vector<Name> availableKeys;
     scheduler::EventId eventId;
     InitiationRecord(const MultipartySchema& trySchema, std::shared_ptr<Data> data,
                      const SignatureFinishCallback& successCb, const SignatureFailureCallback& failureCb);
@@ -239,13 +240,13 @@ private:
   onWrapperFetch(const Interest&);
 
   void
-  onData(uint32_t id, const Name &keyName, const Interest&, const Data& data);
+  onData(uint32_t id, const Name &keyName, const Data& data);
 
   void
-  onNack(uint32_t id, const Interest&, const lp::Nack& nack);
+  onNack(uint32_t id, const Name &keyName, const Interest&, const lp::Nack& nack);
 
   void
-  onTimeout(uint32_t id, const Interest&);
+  onTimeout(uint32_t id, const Name &keyName, const Interest&);
 
   static void
   onRegisterFail(const Name& prefix, const std::string& reason);
@@ -255,6 +256,9 @@ private:
 
   void
   successCleanup(uint32_t id);
+
+  void
+  keyLossTimeout(uint32_t id, const Name& keyName);
 };
 
 }  // namespace ndn
