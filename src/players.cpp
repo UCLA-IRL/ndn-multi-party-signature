@@ -83,11 +83,12 @@ Signer::onInvocation(const Interest& interest)
   }
 
   //add
-  if (!interest.getName().get(-1).isParametersSha256Digest()) {
+  if (!interest.getName().get(m_prefix.size() + 2).isParametersSha256Digest()) {
     NDN_LOG_ERROR("interest not end with parameter SHA digest: " << interest.getName());
     return;
   }
-  auto id = make_shared<const Buffer>(interest.getName().get(-1).value(), interest.getName().get(-1).value_size());
+  auto id = make_shared<const Buffer>(interest.getName().get(m_prefix.size() + 2).value(),
+                                      interest.getName().get(m_prefix.size() + 2).value_size());
   while (m_states.count(*id)) {
     Buffer newBuffer(32);
     random::generateSecureBytes(newBuffer.data(), 32);
@@ -116,7 +117,7 @@ Signer::onResult(const Interest& interest) {
       || !interest.getName().get(m_prefix.size() + 2).isGeneric()) {
     NDN_LOG_ERROR("Bad result request name format");
     replyError(interest.getName(), ReplyCode::BadRequest);
-  } else if (interest.getName().size() >= m_prefix.size() + 4 && !interest.getName().get(-1).isVersion()) {
+  } else if (interest.getName().size() >= m_prefix.size() + 4 && !interest.getName().get(m_prefix.size() + 3).isVersion()) {
     NDN_LOG_ERROR("Bad result request version");
     replyError(interest.getName(), ReplyCode::BadRequest);
   }
@@ -153,7 +154,7 @@ Signer::reply(const Name& interestName, ConstBufferPtr requestId) const {
     return;
   }
   Data data;
-  if (readString(interestName.get(m_prefix.size() + 1)) == "result-of" && !interestName.get(-1).isVersion()) {
+  if (readString(interestName.get(m_prefix.size() + 1)) == "result-of" && !interestName.get(m_prefix.size() + 3).isVersion()) {
     data.setName(Name(interestName).appendVersion(it->second.versionCount));
   } else {
     data.setName(interestName);
@@ -175,7 +176,7 @@ Signer::reply(const Name& interestName, ConstBufferPtr requestId) const {
   }
   data.setContent(block);
   data.setFreshnessPeriod(TIMEOUT);
-  sign(data); //TODO Sign or just digest ?
+  sign(data);
   m_face.put(data);
 }
 
@@ -184,7 +185,7 @@ Signer::replyError(const Name& interestName, ReplyCode errorCode) const
 {
   Data data;
   if (readString(interestName.get(m_prefix.size() + 1)) == "result-of"
-      && !interestName.get(-1).isVersion()) {
+      && !interestName.get(m_prefix.size() + 3).isVersion()) {
     data.setName(Name(interestName).appendVersion(100));
   } else {
     data.setName(interestName);
@@ -192,7 +193,7 @@ Signer::replyError(const Name& interestName, ReplyCode errorCode) const
   data.setContent(Block(tlv::Content, makeStringBlock(tlv::Status,
                                                       std::to_string(static_cast<int>(errorCode)))));
   data.setFreshnessPeriod(TIMEOUT);
-  sign(data); //TODO Sign or just digest ?
+  sign(data);
   m_face.put(data);
 }
 
@@ -454,18 +455,12 @@ Initiator::addSigner(const Name& keyName, const Name& prefix)
 }
 
 void
-Initiator::setInterestSignCallback(std::function<void(Interest&)> func)
-{
-  m_interestSigningCallback = std::move(func);
-}
-
-void
 Initiator::addSigner(const Name& keyName, const blsPublicKey& keyValue, const Name& prefix)
 {
   if (!m_verifier.getCerts().count(keyName)) {
     m_verifier.addCert(keyName, keyValue);
   }
-  m_keyToPrefix.emplace(keyName, prefix);
+  addSigner(keyName, prefix);
 }
 
 void
@@ -504,7 +499,6 @@ Initiator::multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> 
   currentRecord.wrapper.setName(Name(m_prefix).append("mps").append("wrapper").append(toHex(wrapperBuf.data(), 8)));
   currentRecord.wrapper.setContent(makeNestedBlock(tlv::Content, *currentRecord.unsignedData));
   currentRecord.wrapper.setFreshnessPeriod(TIMEOUT);
-  //TODO sign?
   if (m_signer.index() == 0) {
     m_signer.get<0>().first.sign(currentRecord.wrapper, signingByKey(m_signer.get<0>().second));
   } else {
@@ -514,10 +508,6 @@ Initiator::multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> 
   m_wrapToId.emplace(wrapperFullName, currentId);
 
   //send interest
-  if (!m_interestSigningCallback) {
-    NDN_LOG_WARN("No signing callback for initiator");
-
-  }
   for (const Name& i : keyToCheck) {
     Interest interest;
     interest.setName(Name(m_keyToPrefix.at(i)).append("mps").append("sign"));
@@ -525,7 +515,11 @@ Initiator::multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> 
     appParam.push_back(makeNestedBlock(tlv::UnsignedWrapperName, wrapperFullName));
     interest.setApplicationParameters(appParam);
     interest.setInterestLifetime(TIMEOUT);
-    if (m_interestSigningCallback) m_interestSigningCallback(interest);
+    if (m_signer.index() == 0) {
+      m_signer.get<0>().first.sign(interest, signingByKey(m_signer.get<0>().second));
+    } else {
+      m_signer.get<1>().sign(interest);
+    }
     interest.setCanBePrefix(false);
     interest.setMustBeFresh(true);
     m_face.expressInterest(
@@ -704,7 +698,6 @@ Initiator::successCleanup(uint32_t id)
   signerListData.setName(record.unsignedData->getSignatureInfo().getKeyLocator().getName());
   signerListData.setContent(signerList.wireEncode());
   signerListData.setFreshnessPeriod(record.unsignedData->getFreshnessPeriod());
-  //TODO sign?
   if (m_signer.index() == 0) {
     m_signer.get<0>().first.sign(signerListData, signingByKey(m_signer.get<0>().second));
   } else {

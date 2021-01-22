@@ -175,7 +175,6 @@ private:
   optional<RegisteredPrefixHandle> m_handle;
   std::map<uint32_t, InitiationRecord> m_records;
   std::map<Name, uint32_t> m_wrapToId;
-  std::function<void(Interest&)> m_interestSigningCallback;
   variant<std::pair<KeyChain&, Name>, MpsSigner> m_signer;
 public:
 
@@ -223,13 +222,6 @@ public:
    */
   void
   addSigner(const Name& keyName, const blsPublicKey& keyValue, const Name& prefix);
-
-  /**
-   * Set the behavior to sign the interest to signer.
-   * @param func the function to be called when signing interest.
-   */
-  void
-  setInterestSignCallback(std::function<void(Interest&)> func);
 
   /**
    * Initiate the multi-party signing.
