@@ -474,8 +474,7 @@ Initiator::multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> 
       keyToCheck.emplace_back(i.first);
     }
   }
-  if (keyToCheck.size() < schema.minOptionalSigners + schema.signers.size() ||
-      schema.getMinSigners(keyToCheck).empty()) {
+  if (schema.getMinSigners(keyToCheck).empty()) {
     NDN_LOG_WARN("Not enough available signers to satisfy schema");
     if (failureCb)
       failureCb("Not enough available signers to satisfy schema");
@@ -626,15 +625,13 @@ Initiator::onData(uint32_t id, const Name& keyName, const Data& data) {
       return;
     }
     record.signaturePieces.emplace(keyName, sig);
-    if (record.signaturePieces.size() >= record.schema.signers.size() + record.schema.minOptionalSigners) {
-      std::vector<Name> successPiece(record.signaturePieces.size());
-      for (const auto &i : record.signaturePieces) {
-        successPiece.emplace_back(i.first);
-      }
-      if (!record.schema.getMinSigners(successPiece).empty()) {
-        //success
-        successCleanup(id);
-      }
+    std::vector<Name> successPiece(record.signaturePieces.size());
+    for (const auto &i : record.signaturePieces) {
+      successPiece.emplace_back(i.first);
+    }
+    if (!record.schema.getMinSigners(successPiece).empty()) {
+      //success
+      successCleanup(id);
     }
   } else {
     NDN_LOG_ERROR("Signer replied status: " << static_cast<int>(status) << "For interest " << data.getName());
