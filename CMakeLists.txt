@@ -33,7 +33,9 @@ if(NOT json_POPULATED)
 endif()
 
 # project name
-project(ndnmps)
+project(ndnmps
+        VERSION 0.1
+        DESCRIPTION "A multi-signature library for NDN")
 
 # flags
 set(CMAKE_CXX_STANDARD 14)
@@ -80,6 +82,25 @@ if (HAVE_TESTS)
     add_subdirectory(tests)
 endif(HAVE_TESTS)
 
+#configure
+set(PKG_CONFIG_REQUIRES
+        "libndn-cxx >= ${NDN_CXX_VERSION}"
+        )
+set(PKG_CONFIG_LIBS
+        "-L\${libdir} -l${PROJECT_NAME}"
+        )
+set(PKG_CONFIG_CFLAGS
+        "-I\${includedir}"
+        )
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake-pkgconfig.pc.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/lib${PROJECT_NAME}.pc")
+
+include(GNUInstallDirs)
 install(TARGETS ndnmps
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(DIRECTORY include/ndnmps DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+        FILES_MATCHING PATTERN "*.h*")
+
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/lib${PROJECT_NAME}.pc"
+        DESTINATION lib/pkgconfig)
