@@ -7,6 +7,7 @@
 #include <map>
 #include <ndn-cxx/data.hpp>
 #include <ndn-cxx/interest.hpp>
+#include <ndn-cxx/security/certificate.hpp>
 
 #include "mps-signer-list.hpp"
 #include "ndnmps/schema.hpp"
@@ -94,6 +95,32 @@ public:
    */
   void
   sign(Interest& interest, const Name& keyLocatorName = Name()) const;
+
+  /**
+   * sign the packet (as the only signer).
+   * @param data the unsigned data packet, modified to signed packet
+   * @param sigInfo sets the custom signature info
+   * @param keyLocatorName the key name to place in key locator (if empty use this signer's name)
+   */
+  void
+  sign(Data& data, const SignatureInfo& sigInfo) const;
+
+  /**
+   * sign the interest packet (as the only signer).
+   * @param interest the unsigned data packet, modified to signed packet
+   * @param sigInfo sets the custom signature info
+   * @param keyLocatorName the key name to place in key locator (if empty use this signer's name)
+   */
+  void
+  sign(Interest& interest, const SignatureInfo& sigInfo) const;
+
+  /**
+   * generate a self sign certificate for this signer
+   * @param period the expected validity period
+   * @return the generated certificate
+   */
+  security::Certificate
+  getSelfSignCert(const security::ValidityPeriod& period) const;
 };
 
 /**

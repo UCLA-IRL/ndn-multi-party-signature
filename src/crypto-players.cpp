@@ -1,9 +1,9 @@
 #include "ndnmps/crypto-players.hpp"
 
+#include "ndnmps/common.hpp"
 #include <set>
 #include <utility>
-
-#include "ndnmps/common.hpp"
+#include <ndn-cxx/util/random.hpp>
 
 namespace ndn {
 
@@ -109,12 +109,7 @@ MpsSigner::sign(Data& data, const Name& keyLocatorName) const
 {
   SignatureInfo info(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
                      keyLocatorName.empty()? m_signerName : keyLocatorName);
-  auto signature = getSignature(data, info);
-
-  data.setSignatureInfo(info);
-  auto value = make_shared<Buffer>(signature.value(), signature.value_size());
-  data.setSignatureValue(value);
-  data.wireEncode();
+  sign(data, info);
 }
 
 void
@@ -123,7 +118,30 @@ MpsSigner::sign(Interest& interest, const Name& keyLocatorName) const
   SignatureInfo info(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
                      keyLocatorName.empty()? m_signerName : keyLocatorName);
 
-  interest.setSignatureInfo(info);
+  sign(interest, info);
+}
+
+void
+MpsSigner::sign(Data& data, const SignatureInfo& sigInfo) const
+{
+  if (sigInfo.getSignatureType() != tlv::SignatureSha256WithBls) {
+    NDN_THROW(std::runtime_error("Bad signature type from signature info " + std::to_string(sigInfo.getSignatureType())));
+  }
+  auto signature = getSignature(data, sigInfo);
+
+  data.setSignatureInfo(sigInfo);
+  auto value = make_shared<Buffer>(signature.value(), signature.value_size());
+  data.setSignatureValue(value);
+  data.wireEncode();
+}
+
+void
+MpsSigner::sign(Interest& interest, const SignatureInfo& sigInfo) const
+{
+  if (sigInfo.getSignatureType() != tlv::SignatureSha256WithBls) {
+    NDN_THROW(std::runtime_error("Bad signature type from signature info " + std::to_string(sigInfo.getSignatureType())));
+  }
+  interest.setSignatureInfo(sigInfo);
   // Extract function will throw if not all necessary elements are present in Interest
   auto buf = interest.extractSignedRanges();
 
@@ -147,6 +165,24 @@ MpsSigner::sign(Interest& interest, const Name& keyLocatorName) const
   interest.setSignatureValue(std::move(signatureBuf));
   interest.wireEncode();
 }
+
+security::Certificate
+MpsSigner::getSelfSignCert(const security::ValidityPeriod& period) const
+{
+  security::Certificate newCert;
+
+  Name certName = m_signerName;
+  certName.append("self-sign").append(std::to_string(random::generateSecureWord64()));
+  newCert.setName(certName);
+  auto pubKey = getpublicKeyStr();
+  newCert.setContent(pubKey.data(), pubKey.size());
+  SignatureInfo signatureInfo(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls), KeyLocator(m_signerName));
+  signatureInfo.setValidityPeriod(period);
+
+  sign(newCert, signatureInfo);
+  return newCert;
+}
+
 
 MpsVerifier::MpsVerifier()
 {
@@ -236,6 +272,9 @@ bool
 MpsVerifier::verifySignature(const Data& data, const MultipartySchema& schema) const
 {
   const auto& sigInfo = data.getSignatureInfo();
+  if (sigInfo.getCustomTlv(tlv::ValidityPeriod) && !sigInfo.getValidityPeriod().isValid()) {
+    return false;
+  }
   MpsSignerList locator;
   bool aggKeyInitialized = false;
   blsPublicKey aggKey;
@@ -302,7 +341,10 @@ MpsVerifier::verifySignature(const Data& data, const MultipartySchema& schema) c
 bool
 MpsVerifier::verifySignature(const Interest& interest) const {
   const auto &sigInfo = interest.getSignatureInfo();
-  if (!sigInfo || sigInfo->getKeyLocator().getType() != tlv::Name ||
+  if (!sigInfo || (sigInfo->getCustomTlv(tlv::ValidityPeriod) && !sigInfo->getValidityPeriod().isValid())) {
+    return false;
+  }
+  if (sigInfo->getKeyLocator().getType() != tlv::Name ||
       m_certs.count(sigInfo->getKeyLocator().getName()) == 0) {
     return false;
   }
@@ -344,6 +386,9 @@ bool
 MpsVerifier::verifySignaturePiece(const Data& dataWithInfo, const Name& signedBy, const Block& signaturePiece) const
 {
   const auto& sigInfo = dataWithInfo.getSignatureInfo();
+  if (sigInfo.getCustomTlv(tlv::ValidityPeriod) && !sigInfo.getValidityPeriod().isValid()) {
+    return false;
+  }
   if (!sigInfo || sigInfo.getSignatureType() != tlv::SignatureSha256WithBls) {
     NDN_THROW(std::runtime_error("Signer got non-BLS signature type"));
   }
