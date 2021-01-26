@@ -49,7 +49,7 @@ pkg_check_modules(NDN_CXX REQUIRED libndn-cxx)
 find_package(GMP REQUIRED)
 
 # files
-file(GLOB NDN_MPS_SRC
+file(GLOB NDNMPS_SRC
     "./src/*.hpp"
     "./src/*.cpp")
 
@@ -64,7 +64,7 @@ link_directories(${NDN_CXX_LIBRARY_DIRS})
 
 # target
 add_library(ndnmps SHARED "")
-target_sources(ndnmps PRIVATE ${NDN_MPS_SRC})
+target_sources(ndnmps PRIVATE ${NDNMPS_SRC})
 target_include_directories(ndnmps PUBLIC ./include)
 target_include_directories(ndnmps PRIVATE ./src)
 target_compile_options(ndnmps PUBLIC ${NDN_CXX_CFLAGS} )
@@ -100,6 +100,8 @@ install(TARGETS ndnmps
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(DIRECTORY include/ndnmps DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+        FILES_MATCHING PATTERN "*.h*")
+install(DIRECTORY external/bls/include/bls DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
         FILES_MATCHING PATTERN "*.h*")
 
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/lib${PROJECT_NAME}.pc"

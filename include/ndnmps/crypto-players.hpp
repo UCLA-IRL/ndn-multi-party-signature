@@ -149,6 +149,14 @@ public:
   addCert(const Name& keyName, blsPublicKey pk);
 
   /**
+   * Add trusted BLS keys to the verifier.
+   * @param cert a BLS certificate.
+   * @throw runtime_error if the cert has bad format or not BLS.
+   */
+  void
+  addCert(const security::Certificate& cert);
+
+  /**
    * Add obtained signer list to the verifier.
    * @param listName the name of the signer list
    * @param list the signer list

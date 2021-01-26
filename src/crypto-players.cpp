@@ -196,6 +196,19 @@ MpsVerifier::addCert(const Name& keyName, blsPublicKey pk)
 }
 
 void
+MpsVerifier::addCert(const security::Certificate& cert)
+{
+  auto keyName = cert.getKeyName();
+  const auto& content = cert.getContent();
+  blsPublicKey pk;
+  int ret = blsPublicKeyDeserialize(&pk, content.value(), content.value_size());
+  if (ret == 0) {
+    NDN_THROW(std::runtime_error("not a BLS key in the certificate"));
+  }
+  m_certs.emplace(keyName, pk);
+}
+
+void
 MpsVerifier::addSignerList(const Name& listName, MpsSignerList list)
 {
   m_signLists.emplace(listName, list);

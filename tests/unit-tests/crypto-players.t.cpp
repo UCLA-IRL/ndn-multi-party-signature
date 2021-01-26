@@ -138,9 +138,14 @@ BOOST_AUTO_TEST_CASE(TestSignerVerifierSelfCert)
   MultipartySchema schema;
   schema.signers.emplace_back(signer.getSignerKeyName());
 
-  BOOST_CHECK(verifier.verifySignature(signer.getSelfSignCert(
-          security::ValidityPeriod(time::system_clock::now() - time::seconds(1), time::system_clock::now() + time::days(100))),
-                           schema));
+  auto cert = signer.getSelfSignCert(
+          security::ValidityPeriod(time::system_clock::now() - time::seconds(1), time::system_clock::now() + time::days(100)));
+
+  BOOST_CHECK(verifier.verifySignature(cert,
+                                       schema));
+
+  MpsVerifier loader;
+  BOOST_CHECK_NO_THROW(loader.addCert(cert));
 }
 
 BOOST_AUTO_TEST_CASE(TestSignerVerifierSelfBadCert)
@@ -158,6 +163,30 @@ BOOST_AUTO_TEST_CASE(TestSignerVerifierSelfBadCert)
           security::ValidityPeriod(time::system_clock::now() - time::days(100), time::system_clock::now() - time::seconds(1))),
                            schema));
 }
+
+BOOST_AUTO_TEST_CASE(TestSignerVerifierSelfBadCert2)
+{
+  MpsSigner signer("/a/b/c/KEY/1234");
+  auto pub = signer.getPublicKey();
+
+  MpsVerifier verifier;
+  verifier.addCert(signer.getSignerKeyName(), pub);
+
+  MultipartySchema schema;
+  schema.signers.emplace_back(signer.getSignerKeyName());
+
+  auto cert = signer.getSelfSignCert(
+          security::ValidityPeriod(time::system_clock::now() - time::seconds(1), time::system_clock::now() + time::days(100)));
+  auto newBuffer = make_shared<Buffer>(cert.getContent().value(), cert.getContent().value_size() - 1);
+  cert.setContent(newBuffer);
+
+  BOOST_CHECK(!verifier.verifySignature(cert,
+                                       schema));
+
+  MpsVerifier loader;
+  BOOST_CHECK_THROW(loader.addCert(cert), std::runtime_error);
+}
+
 
 BOOST_AUTO_TEST_CASE(TestAggregateSignVerify)
 {
