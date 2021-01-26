@@ -419,13 +419,31 @@ MpsVerifier::verifySignaturePiece(const Data& dataWithInfo, const Name& signedBy
     return blsVerify(&sig, &publicKey, encoder.buf(), encoder.size());
 }
 
-MpsAggregater::MpsAggregater()
+bool
+MpsVerifier::verifySignature(const Data& data, const security::Certificate& cert)
+{
+  MpsVerifier verifier;
+  verifier.addCert(cert);
+  MultipartySchema schema;
+  schema.signers.emplace_back(cert.getKeyName());
+  return verifier.verifySignature(data, schema);
+}
+
+bool
+MpsVerifier::verifySignature(const Interest& interest, const security::Certificate& cert)
+{
+  MpsVerifier verifier;
+  verifier.addCert(cert);
+  return verifier.verifySignature(interest);
+}
+
+MpsAggregator::MpsAggregator()
 {
   bls_library_init();
 }
 
 void
-MpsAggregater::buildMultiSignature(Data& data, const SignatureInfo& sigInfo,
+MpsAggregator::buildMultiSignature(Data& data, const SignatureInfo& sigInfo,
                                    const std::vector<blsSignature>& collectedPiece) const
 {
   data.setSignatureInfo(sigInfo);
@@ -433,7 +451,7 @@ MpsAggregater::buildMultiSignature(Data& data, const SignatureInfo& sigInfo,
 }
 
 void
-MpsAggregater::buildMultiSignature(Data& dataWithInfo, const std::vector<blsSignature>& collectedPiece) const
+MpsAggregator::buildMultiSignature(Data& dataWithInfo, const std::vector<blsSignature>& collectedPiece) const
 {
   if (!dataWithInfo.getSignatureInfo()) {
     NDN_THROW(std::runtime_error("No signature info for the data"));

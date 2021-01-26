@@ -223,7 +223,7 @@ BOOST_AUTO_TEST_CASE(TestAggregateSignVerify)
   BOOST_ASSERT(verifier.verifySignaturePiece(data1, signer.getSignerKeyName(), sig1));
   BOOST_ASSERT(verifier.verifySignaturePiece(data1, signer2.getSignerKeyName(), sig2));
 
-  MpsAggregater aggregater;
+  MpsAggregator aggregater;
   std::vector<blsSignature> signatures;
   {
     blsSignature sig1s;
@@ -274,7 +274,7 @@ BOOST_AUTO_TEST_CASE(TestAggregateSignVerifyBadKey)
   BOOST_ASSERT(verifier.verifySignaturePiece(data1, signer.getSignerKeyName(), sig1));
   BOOST_ASSERT(verifier.verifySignaturePiece(data1, signer2.getSignerKeyName(), sig2));
 
-  MpsAggregater aggregater;
+  MpsAggregator aggregater;
   std::vector<blsSignature> signatures;
   {
     blsSignature sig1s;
@@ -326,7 +326,7 @@ BOOST_AUTO_TEST_CASE(TestAggregateSignVerifyBadSig)
   data1.setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4/5")));
   BOOST_ASSERT(!verifier.verifySignaturePiece(data1, signer2.getSignerKeyName(), sig2));
 
-  MpsAggregater aggregater;
+  MpsAggregator aggregater;
   std::vector<blsSignature> signatures;
   {
     blsSignature sig1s;

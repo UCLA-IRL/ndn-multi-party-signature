@@ -154,7 +154,7 @@ typedef function<void(const std::string& reason)> SignatureFailureCallback;
 /**
  * The initiator class for the multisigning protocol.
  */
-class Initiator : public MpsAggregater {
+class Initiator : public MpsAggregator {
 private:
   struct InitiationRecord {
     const MultipartySchema schema;

@@ -67,7 +67,7 @@ add_library(ndnmps SHARED "")
 target_sources(ndnmps PRIVATE ${NDNMPS_SRC})
 target_include_directories(ndnmps PUBLIC ./include)
 target_include_directories(ndnmps PRIVATE ./src)
-target_compile_options(ndnmps PUBLIC ${NDN_CXX_CFLAGS} )
+target_compile_options(ndnmps PUBLIC ${NDN_CXX_CFLAGS})
 target_link_libraries(ndnmps PUBLIC
 ${NDN_CXX_LIBRARIES}
 ${GMP_LIBRARIES}

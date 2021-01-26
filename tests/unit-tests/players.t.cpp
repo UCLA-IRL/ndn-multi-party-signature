@@ -150,7 +150,7 @@ BOOST_AUTO_TEST_CASE(VerifierListFetch)
   auto sig1 = signer.getSignature(*data1);
   auto sig2 = signer2.getSignature(*data1);
 
-  MpsAggregater aggregater;
+  MpsAggregator aggregater;
   std::vector<blsSignature> signatures;
   {
     blsSignature sig1s;

@@ -226,7 +226,7 @@ public:
   verifySignature(const Interest& interest) const;
 
   /**
-   * verify a signle piece of signature of the packet, from a signer.
+   * verify a single piece of signature of the packet, from a signer.
    * @param data the unsigned data to be checked
    * @param info the signature info to be used
    * @param signedBy the signer name
@@ -237,7 +237,7 @@ public:
   verifySignaturePiece(Data data, const SignatureInfo& info, const Name& signedBy, const Block& signaturePiece) const;
 
   /**
-   * Verify the sigature piece with the signature info already in the given data.
+   * Verify the signature piece with the signature info already in the given data.
    * @param dataWithInfo the unsigned data to be checked, with the signature info already set
    * @param signedBy the signer name
    * @param signaturePiece the piece of signature value given.
@@ -245,17 +245,36 @@ public:
    */
   bool
   verifySignaturePiece(const Data& dataWithInfo, const Name& signedBy, const Block& signaturePiece) const;
+
+public:
+  /**
+   * verify the signature of the packet from a certificate.
+   * @param data the data to be checked
+   * @param cert certificate to be checked against
+   * @return true if the verifier verifies this data's signature successfully; false otherwise
+   */
+  static bool
+  verifySignature(const Data& data, const security::Certificate& cert);
+
+  /**
+   * verify the signature of the interest from a certificate.
+   * @param interest the interest to be checked
+   * @param cert certificate to be checked against
+   * @return true if the verifier verifies this data's signature successfully; false otherwise
+   */
+  static bool
+  verifySignature(const Interest& interest, const security::Certificate& cert);
 };
 
 /**
- * The aggregater class for aggregating the signature piece.
+ * The aggregator class for aggregating the signature piece.
  */
-class MpsAggregater {
+class MpsAggregator {
 public:
   /**
    * Construct the aggregator that aggregates the signature pieces and signs the data.
    */
-  MpsAggregater();
+  MpsAggregator();
 
   /**
    * Build the multisignature based on the given pieces of signature.
