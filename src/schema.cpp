@@ -111,27 +111,35 @@ MultipartySchema::MultipartySchema()
 std::string
 MultipartySchema::toString()
 {
-  Json content;
-  content[CONFIG_DATA_NAME] = this->prefix.toUri();
-  content[CONFIG_RULE_ID] = this->ruleId;
+  SchemaSection content;
+  content.put(CONFIG_DATA_NAME, this->prefix.toUri());
+  content.put(CONFIG_RULE_ID, this->ruleId);
   if (this->minOptionalSigners > 0) {
-    content[CONFIG_AT_LEAST_NUM] = this->minOptionalSigners;
+    content.put(CONFIG_AT_LEAST_NUM, this->minOptionalSigners);
   }
   if (!signers.empty()) {
-    std::vector<std::string> signersVec;
+    SchemaSection signersNode;
     for (const auto& signer : this->signers) {
-      signersVec.push_back(signer.toUri());
+      // Create an unnamed node containing the value
+      SchemaSection signerNode;
+      signerNode.put("", signer.toUri());
+      signersNode.push_back(std::make_pair("", signerNode));
     }
-    content[CONFIG_ALL_OF] = signersVec;
+    content.add_child(CONFIG_ALL_OF, signersNode);
   }
   if (!optionalSigners.empty()) {
-    std::vector<std::string> optionalSignersVec;
+    SchemaSection optionalSignersNode;
     for (const auto& signer : this->optionalSigners) {
-      optionalSignersVec.push_back(signer.toUri());
+      SchemaSection signerNode;
+      signerNode.put("", signer.toUri());
+      optionalSignersNode.push_back(std::make_pair("", signerNode));
     }
-    content[CONFIG_AT_LEAST] = optionalSignersVec;
+    content.add_child(CONFIG_AT_LEAST, optionalSignersNode);
   }
-  return content.dump();
+
+  std::stringstream ss;
+  boost::property_tree::info_parser::write_info(ss, content);
+  return ss.str();
 }
 
 std::vector<Name>

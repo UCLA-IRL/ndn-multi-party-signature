@@ -66,7 +66,7 @@ BOOST_AUTO_TEST_CASE(SchemaWrite)
   schema.optionalSigners.emplace_back("/some/key-d");
   schema.minOptionalSigners = 1;
 
-  auto schema2 = MultipartySchema::fromJSON(schema.toString());
+  auto schema2 = MultipartySchema::fromINFO(schema.toString());
 
   BOOST_CHECK_EQUAL(schema.prefix, schema2.prefix);
   BOOST_CHECK_EQUAL(schema.ruleId, schema2.ruleId);
@@ -85,7 +85,7 @@ BOOST_AUTO_TEST_CASE(SchemaWrite2)
   schema.signers.emplace_back("/some/key-a");
   schema.signers.emplace_back("/some/key-b");
 
-  auto schema2 = MultipartySchema::fromJSON(schema.toString());
+  auto schema2 = MultipartySchema::fromINFO(schema.toString());
 
   BOOST_CHECK_EQUAL(schema.prefix, schema2.prefix);
   BOOST_CHECK_EQUAL(schema.ruleId, schema2.ruleId);
@@ -105,7 +105,7 @@ BOOST_AUTO_TEST_CASE(SchemaWrite3)
   schema.optionalSigners.emplace_back("/some/key-d");
   schema.minOptionalSigners = 1;
 
-  auto schema2 = MultipartySchema::fromJSON(schema.toString());
+  auto schema2 = MultipartySchema::fromINFO(schema.toString());
 
   BOOST_CHECK_EQUAL(schema.prefix, schema2.prefix);
   BOOST_CHECK_EQUAL(schema.ruleId, schema2.ruleId);

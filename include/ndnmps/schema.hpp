@@ -2,12 +2,9 @@
 #define NDNMPS_SCHEMA_HPP
 
 #include <ndn-cxx/name.hpp>
-#include <nlohmann/json.hpp>
 #include <set>
 #include <list>
 #include "mps-signer-list.hpp"
-
-using Json = nlohmann::json;
 
 namespace ndn {
 
@@ -73,8 +70,8 @@ public:
   MultipartySchema();
 
   /**
-   * Encode the schema to (JSON) string.
-   * @return the corresponding JSON string.
+   * Encode the schema to (INFO) string.
+   * @return the corresponding INFO string.
    */
   std::string
   toString();

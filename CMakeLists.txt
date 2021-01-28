@@ -21,17 +21,6 @@ if(NOT EXISTS "${BLS_ROOT}/lib/libbls384_256.a")
     WORKING_DIRECTORY ${BLS_ROOT})
 endif(NOT EXISTS "${BLS_ROOT}/lib/libbls384_256.a")
 
-message("Check dependency: JSON")
-FetchContent_Declare(json
-  GIT_REPOSITORY https://github.com/nlohmann/json.git
-  GIT_TAG v3.7.3)
-
-FetchContent_GetProperties(json)
-if(NOT json_POPULATED)
-  FetchContent_Populate(json)
-  add_subdirectory(${json_SOURCE_DIR} ${json_BINARY_DIR} EXCLUDE_FROM_ALL)
-endif()
-
 # project name
 project(ndnmps
         VERSION 0.1
@@ -73,8 +62,7 @@ ${NDN_CXX_LIBRARIES}
 ${GMP_LIBRARIES}
 ${CMAKE_SOURCE_DIR}/external/bls/lib/libbls384_256.a
 ${CMAKE_SOURCE_DIR}/external/mcl/lib/libmclbn384_256.a
-${CMAKE_SOURCE_DIR}/external/mcl/lib/libmcl.a
-nlohmann_json::nlohmann_json)
+${CMAKE_SOURCE_DIR}/external/mcl/lib/libmcl.a)
 
 if (HAVE_TESTS)
     message("Added Unit Tests")
@@ -90,7 +78,7 @@ set(PKG_CONFIG_LIBS
         "-L\${libdir} -l${PROJECT_NAME}"
         )
 set(PKG_CONFIG_CFLAGS
-        "-I\${includedir}"
+        "-I\${includedir} -I\${includedir}/${PROJECT_NAME}/external"
         )
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake-pkgconfig.pc.in"
         "${CMAKE_CURRENT_BINARY_DIR}/lib${PROJECT_NAME}.pc")
@@ -101,7 +89,9 @@ install(TARGETS ndnmps
         PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(DIRECTORY include/ndnmps DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
         FILES_MATCHING PATTERN "*.h*")
-install(DIRECTORY external/bls/include/bls DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+install(DIRECTORY external/bls/include/bls DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ndnmps/external
+        FILES_MATCHING PATTERN "*.h*")
+install(DIRECTORY external/mcl/include/mcl DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ndnmps/external
         FILES_MATCHING PATTERN "*.h*")
 
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/lib${PROJECT_NAME}.pc"
