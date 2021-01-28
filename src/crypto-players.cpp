@@ -175,6 +175,7 @@ MpsSigner::getSelfSignCert(const security::ValidityPeriod& period) const
   certName.append("self-sign").append(std::to_string(random::generateSecureWord64()));
   newCert.setName(certName);
   auto pubKey = getpublicKeyStr();
+  newCert.setContentType(tlv::ContentType_Key);
   newCert.setContent(pubKey.data(), pubKey.size());
   SignatureInfo signatureInfo(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls), KeyLocator(m_signerName));
   signatureInfo.setValidityPeriod(period);
