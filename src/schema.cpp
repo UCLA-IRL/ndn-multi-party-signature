@@ -169,37 +169,32 @@ MultipartySchema::isSatisfied(const MpsSignerList& signers) const
   return true;
 }
 
-Name
-findAMatch(const WildCardName& target, const std::vector<Name>& collection)
-{
-  for (const auto& item : collection) {
-    if (target.match(item)) {
-      return item;
-    }
-  }
-  return Name();
-}
-
 std::set<Name>
 MultipartySchema::getMinSigners(const std::vector<Name>& availableKeys) const
 {
+  std::map<Name, Name> matches;
+  for (const auto& i : availableKeys) {
+    for (const auto& pos : getKeyMatches(i)) {
+      if (matches.count(pos) == 0)
+        matches.emplace(pos, i);
+    }
+  }
   std::set<Name> resultSet;
   for (const auto& requiredSigner : this->signers) {
-    auto result = findAMatch(requiredSigner, availableKeys);
-    if (result.empty()) {
+    if (matches.count(requiredSigner) == 0) {
       return std::set<Name>();
     }
     else {
-      resultSet.insert(result);
+      resultSet.insert(matches.at(requiredSigner));
     }
   }
   size_t count = 0;
   for (const auto& optionalSigner : this->optionalSigners) {
-    auto result = findAMatch(optionalSigner, availableKeys);
-    if (!result.empty()) {
+    if (matches.count(optionalSigner) != 0) {
       count++;
-      resultSet.insert(result);
+      resultSet.insert(matches.at(optionalSigner));
     }
+    if (count >= this->minOptionalSigners) break;
   }
   if (count < this->minOptionalSigners) {
     return std::set<Name>();
