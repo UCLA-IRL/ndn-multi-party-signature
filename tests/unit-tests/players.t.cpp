@@ -21,7 +21,7 @@ BOOST_FIXTURE_TEST_SUITE(TestPlayers, IdentityManagementTimeFixture)
 BOOST_AUTO_TEST_CASE(VerifierFetch)
 {
   util::DummyClientFace face(io, m_keyChain, {true, true});
-  Verifier verifier(MpsVerifier(), face);
+  Verifier verifier(MpsVerifier(), face, true);
   verifier.setCertVerifyCallback([](auto&){return true;});
 
   MpsSigner signer("/a/b/c/KEY/1234");
@@ -68,6 +68,57 @@ BOOST_AUTO_TEST_CASE(VerifierFetch)
   BOOST_CHECK_EQUAL(received, true);
   BOOST_CHECK_EQUAL(finish, false);
   face.receive(cert);
+  advanceClocks(time::milliseconds(20), 10);
+  BOOST_CHECK_EQUAL(finish, true);
+  BOOST_CHECK_EQUAL(output, true);
+}
+
+BOOST_AUTO_TEST_CASE(VerifierFetch2)
+{
+  util::DummyClientFace face(io, m_keyChain, {true, true});
+  Verifier verifier(MpsVerifier(), face);
+
+  MpsSigner signer("/a/b/c/KEY/1234");
+  BOOST_CHECK_EQUAL(signer.getSignerKeyName(), "/a/b/c/KEY/1234");
+  auto pub = signer.getPublicKey();
+  verifier.addCert(signer.getSignerKeyName(), pub);
+
+  //data to fetch
+  Data dataF;
+  dataF.setName(Name("/some/signer/list"));
+  std::vector<Name> signers;
+  signers.push_back(signer.getSignerKeyName());
+  dataF.setContent(makeNestedBlock(tlv::Content, MpsSignerList(signers)));
+  dataF.setFreshnessPeriod(time::seconds(1));
+  m_keyChain.sign(dataF, signingWithSha256());
+
+  //data to test
+  auto data1 = make_shared<Data>();
+  data1->setName(Name("/a/b/c/d"));
+  data1->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+
+  MultipartySchema schema;
+  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
+  signer.sign(*data1, SignatureInfo(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls), KeyLocator(dataF.getName())));
+
+  bool received = false;
+  face.onSendInterest.connect([&](const Interest& interest){
+    BOOST_CHECK_EQUAL(interest.getName(), dataF.getName());
+    BOOST_CHECK_EQUAL(interest.getCanBePrefix(), true);
+    received = true;
+  });
+
+  bool finish = false;
+  bool output = false;
+  advanceClocks(time::milliseconds(20), 10);
+  verifier.asyncVerifySignature(data1, make_shared<MultipartySchema>(schema),
+                                [&](bool input){finish = true; output = input;});
+
+  BOOST_CHECK_EQUAL(finish, false);
+  advanceClocks(time::milliseconds(20), 10);
+  BOOST_CHECK_EQUAL(received, true);
+  BOOST_CHECK_EQUAL(finish, false);
+  face.receive(dataF);
   advanceClocks(time::milliseconds(20), 10);
   BOOST_CHECK_EQUAL(finish, true);
   BOOST_CHECK_EQUAL(output, true);
@@ -189,7 +240,7 @@ BOOST_AUTO_TEST_CASE(VerifierListFetch)
 BOOST_AUTO_TEST_CASE(VerifierParallelFetch)
 {
   util::DummyClientFace face(io, m_keyChain, {true, true});
-  Verifier verifier(MpsVerifier(), face);
+  Verifier verifier(MpsVerifier(), face, true);
   verifier.setCertVerifyCallback([](auto&){return true;});
 
   //request1

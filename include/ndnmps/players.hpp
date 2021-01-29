@@ -106,14 +106,15 @@ private:
   std::map<Name, std::set<uint32_t>> m_index;
   Face& m_face;
   function<bool(const Data&)> m_certVerifyCallback;
-
+  bool m_fetchKeys;
 public:
   /**
    * Construct the verifier.
    * @param v the MpsVerifier to use that contains initial key chain.
    * @param face the network interface.
+   * @param fetchKeys if true, fetch unknown keys
    */
-  Verifier(MpsVerifier v, Face& face);
+  Verifier(MpsVerifier v, Face& face, bool fetchKeys = false);
 
   /**
    * set the behavior when received a new certificate.

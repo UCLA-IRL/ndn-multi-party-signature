@@ -284,9 +284,10 @@ Signer::onTimeout(const Interest& interest)
   }
 }
 
-Verifier::Verifier(MpsVerifier verifier, Face& face)
+Verifier::Verifier(MpsVerifier verifier, Face& face, bool fetchKeys)
     : MpsVerifier(std::move(verifier))
     , m_face(face)
+    , m_fetchKeys(fetchKeys)
 {
 }
 
@@ -337,7 +338,7 @@ Verifier::removeAll(const Name& name)
 void
 Verifier::onData(const Interest& interest, const Data& data)
 {
-  if (security::Certificate::isValidName(data.getName())) {
+  if (m_fetchKeys && security::Certificate::isValidName(data.getName())) {
     //certificate
     if (m_certVerifyCallback && m_certVerifyCallback(data)) {
       const auto& c = data.getContent();
