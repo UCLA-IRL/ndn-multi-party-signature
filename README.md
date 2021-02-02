@@ -6,13 +6,25 @@ Goals:
 * Multi-party signature negotiation protocol
 * Multi-party signature verification scheme with enhanced NDN Trust Schema
 
-## Compile
+## Build
+
+Build without unit tests:
 
 ```bash
 mkdir build
 cd build
 cmake ..
 make
+```
+
+Build with unit tests:
+
+```bash
+mkdir build
+cd build
+cmake .. -DHAVE_TESTS=1
+make
+./unit-tests
 ```
 
 ## Progress Track

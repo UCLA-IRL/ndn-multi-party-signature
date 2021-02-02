@@ -1,5 +1,4 @@
 #include "ndnmps/common.hpp"
-
 #include <ndn-cxx/util/backports.hpp>
 
 namespace ndn {
@@ -24,25 +23,4 @@ operator<<(std::ostream& os, MpsSignatureTypeValue st)
 }
 
 }  // namespace tlv
-
-std::ostream&
-operator<<(std::ostream& os, MpsKeyType keyType)
-{
-  switch (keyType) {
-  case MpsKeyType::NONE:
-    return os << "NONE";
-  case MpsKeyType::RSA:
-    return os << "RSA";
-  case MpsKeyType::EC:
-    return os << "EC";
-  case MpsKeyType::AES:
-    return os << "AES";
-  case MpsKeyType::BLS:
-    return os << "BLS";
-  case MpsKeyType::HMAC:
-    return os << "HMAC";
-  }
-  return os << to_underlying(keyType);
-}
-
 }  // namespace ndn

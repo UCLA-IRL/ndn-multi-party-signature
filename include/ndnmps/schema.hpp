@@ -100,17 +100,6 @@ public:
    */
   std::set<Name>
   getMinSigners(const std::vector<Name>& availableKeys) const;
-
-private:
-  // static void
-  // parseAssert(bool criterion);
-
-  // static std::vector<std::pair<int, int>>
-  // modifiedFordFulkerson(const std::vector<std::set<int>>& bipartiteAdjList,
-  //                       int mustHaveSize, int optionalSize);
-
-  // static bool
-  // fordFulkersonDFS(const std::map<int, std::set<int>>& adjList, int start, int end, std::list<int>& path);
 };
 
 }  // namespace ndn

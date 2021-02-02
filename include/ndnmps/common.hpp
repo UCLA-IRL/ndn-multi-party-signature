@@ -56,20 +56,6 @@ enum class ReplyCode : int {
   Unavailable = 503,
 };
 
-/**
- * @brief The extended type of a cryptographic key with Multi-Party Signature.
- */
-enum class MpsKeyType {
-  NONE = 0,  ///< Unknown or unsupported key type
-  RSA,       ///< RSA key, supports sign/verify and encrypt/decrypt operations
-  EC,        ///< Elliptic Curve key (e.g. for ECDSA), supports sign/verify operations
-  BLS,       ///< BLS key, supports sign/verify operations
-  AES,       ///< AES key, supports encrypt/decrypt operations
-  HMAC,      ///< HMAC key, supports sign/verify operations
-};
-
-std::ostream&
-operator<<(std::ostream& os, MpsKeyType keyType);
 }  // namespace ndn
 
 #endif  // NDNMPS_COMMON_HPP
