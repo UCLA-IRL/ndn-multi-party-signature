@@ -98,7 +98,7 @@ typedef function<void(bool)> VerifyFinishCallback;
  * The class for verifier, which will fetch the unknown data.
  * Note that this is different from MpsVerifier, which will not fetch the data from network.
  */
-class Verifier : public MpsVerifier {
+class Verifier {
 private:
   struct VerificationRecord {
     shared_ptr<const Data> data;
@@ -113,13 +113,16 @@ private:
   bool m_fetchKeys;
 
 public:
+  std::unique_ptr<MpsVerifier> m_verifier;
+
+public:
   /**
    * Construct the verifier.
    * @param v the MpsVerifier to use that contains initial key chain.
    * @param face the network interface.
    * @param fetchKeys if true, fetch unknown keys
    */
-  Verifier(MpsVerifier v, Face& face, bool fetchKeys = false);
+  Verifier(std::unique_ptr<MpsVerifier> verifier, Face& face, bool fetchKeys = false);
 
   /**
    * set the behavior when received a new certificate.

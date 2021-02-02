@@ -11,7 +11,7 @@ BOOST_FIXTURE_TEST_SUITE(TestPlayers, IdentityManagementTimeFixture)
 BOOST_AUTO_TEST_CASE(VerifierFetch)
 {
   util::DummyClientFace face(io, m_keyChain, {true, true});
-  Verifier verifier(MpsVerifier(), face, true);
+  Verifier verifier(std::make_unique<MpsVerifier>(), face, true);
   verifier.setCertVerifyCallback([](auto&){return true;});
 
   MpsSigner mpsSigner("/a/b/c/KEY/1234");
@@ -65,12 +65,12 @@ BOOST_AUTO_TEST_CASE(VerifierFetch)
 BOOST_AUTO_TEST_CASE(VerifierFetch2)
 {
   util::DummyClientFace face(io, m_keyChain, {true, true});
-  Verifier verifier(MpsVerifier(), face);
+  Verifier verifier(std::make_unique<MpsVerifier>(), face);
 
   MpsSigner mpsSigner("/a/b/c/KEY/1234");
   BOOST_CHECK_EQUAL(mpsSigner.getSignerKeyName(), "/a/b/c/KEY/1234");
   auto pub = mpsSigner.getPublicKey();
-  verifier.addCert(mpsSigner.getSignerKeyName(), pub);
+  verifier.m_verifier->addCert(mpsSigner.getSignerKeyName(), pub);
 
   //data to fetch
   Data dataF;
@@ -116,7 +116,7 @@ BOOST_AUTO_TEST_CASE(VerifierFetch2)
 BOOST_AUTO_TEST_CASE(VerifierFetchTimeout)
 {
   util::DummyClientFace face(io, m_keyChain, {true, true});
-  Verifier verifier(MpsVerifier(), face);
+  Verifier verifier(std::make_unique<MpsVerifier>(), face);
   verifier.setCertVerifyCallback([](auto&){return true;});
 
   MpsSigner mpsSigner("/a/b/c/KEY/1234");
@@ -153,7 +153,7 @@ BOOST_AUTO_TEST_CASE(VerifierFetchTimeout)
 BOOST_AUTO_TEST_CASE(VerifierListFetch)
 {
   util::DummyClientFace face(io, m_keyChain, {true, true});
-  Verifier verifier(MpsVerifier(), face);
+  Verifier verifier(std::make_unique<MpsVerifier>(), face);
   verifier.setCertVerifyCallback([](auto&){return true;});
 
   MpsSigner mpsSigner("/a/b/c");
@@ -163,8 +163,8 @@ BOOST_AUTO_TEST_CASE(VerifierListFetch)
   MpsSigner mpsSigner2("/a/b/d");
   auto pub2 = mpsSigner2.getPublicKey();
 
-  verifier.addCert("/a/b/c", pub);
-  verifier.addCert("/a/b/d", pub2);
+  verifier.m_verifier->addCert("/a/b/c", pub);
+  verifier.m_verifier->addCert("/a/b/d", pub2);
 
   shared_ptr<Data> data1 = make_shared<Data>();
   data1->setName(Name("/a/b/c/d"));
@@ -229,7 +229,7 @@ BOOST_AUTO_TEST_CASE(VerifierListFetch)
 BOOST_AUTO_TEST_CASE(VerifierParallelFetch)
 {
   util::DummyClientFace face(io, m_keyChain, {true, true});
-  Verifier verifier(MpsVerifier(), face, true);
+  Verifier verifier(std::make_unique<MpsVerifier>(), face, true);
   verifier.setCertVerifyCallback([](auto&){return true;});
 
   //request1

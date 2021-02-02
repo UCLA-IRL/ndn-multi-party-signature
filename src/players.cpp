@@ -196,8 +196,7 @@ Signer::replyError(const Name& interestName, ReplyCode errorCode) const
   else {
     data.setName(interestName);
   }
-  data.setContent(Block(tlv::Content, makeStringBlock(tlv::Status,
-                                                      std::to_string(static_cast<int>(errorCode)))));
+  data.setContent(makeStringBlock(tlv::Status, std::to_string(static_cast<int>(errorCode))));
   data.setFreshnessPeriod(TIMEOUT);
   m_signer->sign(data);
   m_face.put(data);
@@ -289,8 +288,8 @@ Signer::onTimeout(const Interest& interest)
   }
 }
 
-Verifier::Verifier(MpsVerifier verifier, Face& face, bool fetchKeys)
-    : MpsVerifier(std::move(verifier))
+Verifier::Verifier(std::unique_ptr<MpsVerifier> verifier, Face& face, bool fetchKeys)
+    : m_verifier(std::move(verifier))
     , m_face(face)
     , m_fetchKeys(fetchKeys)
 {
@@ -306,13 +305,13 @@ void
 Verifier::asyncVerifySignature(shared_ptr<const Data> data, shared_ptr<const MultipartySchema> schema, const VerifyFinishCallback& callback)
 {
   uint32_t currentId = random::generateSecureWord32();
-  if (readyToVerify(*data)) {
-    callback(verifySignature(*data, *schema));
+  if (m_verifier->readyToVerify(*data)) {
+    callback(m_verifier->verifySignature(*data, *schema));
   }
   else {
     //store, fetch and wait
     VerificationRecord r{data, schema, callback, 0};
-    for (const auto& item : itemsToFetch(*data)) {
+    for (const auto& item : m_verifier->itemsToFetch(*data)) {
       Interest interest(item);
       interest.setCanBePrefix(true);
       interest.setMustBeFresh(true);
@@ -356,7 +355,7 @@ Verifier::onData(const Interest& interest, const Data& data)
         removeAll(interest.getName());
         NDN_LOG_ERROR("Certificate cannot be decoded for " << interest.getName());
       }
-      addCert(interest.getName(), key);
+      m_verifier->addCert(interest.getName(), key);
       satisfyItem(interest.getName());
     }
     else {
@@ -370,7 +369,7 @@ Verifier::onData(const Interest& interest, const Data& data)
       const auto& content = data.getContent();
       content.parse();
       if (content.get(tlv::MpsSignerList).isValid()) {
-        addSignerList(interest.getName(), MpsSignerList(content.get(tlv::MpsSignerList)));
+        m_verifier->addSignerList(interest.getName(), MpsSignerList(content.get(tlv::MpsSignerList)));
         satisfyItem(interest.getName());
         return;
       }
