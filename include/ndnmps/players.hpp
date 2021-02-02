@@ -33,6 +33,7 @@ private:
   };
   std::map<Buffer, RequestInfo> m_states;
   std::map<Name, Buffer> m_unsignedNames;
+
 public:
   /**
    * Construct the signer participant in the protocol
@@ -107,6 +108,7 @@ private:
   Face& m_face;
   function<bool(const Data&)> m_certVerifyCallback;
   bool m_fetchKeys;
+
 public:
   /**
    * Construct the verifier.
@@ -178,8 +180,8 @@ private:
   std::map<uint32_t, InitiationRecord> m_records;
   std::map<Name, uint32_t> m_wrapToId;
   variant<std::pair<KeyChain&, Name>, MpsSigner> m_signer;
-public:
 
+public:
   /**
    * Construct the initiator. The data are signed with NDN-cxx keychain.
    * @param verifier the verifier to verify the signature piece.
@@ -241,13 +243,13 @@ private:
   onWrapperFetch(const Interest&);
 
   void
-  onData(uint32_t id, const Name &keyName, const Data& data);
+  onData(uint32_t id, const Name& keyName, const Data& data);
 
   void
-  onNack(uint32_t id, const Name &keyName, const Interest&, const lp::Nack& nack);
+  onNack(uint32_t id, const Name& keyName, const Interest&, const lp::Nack& nack);
 
   void
-  onTimeout(uint32_t id, const Name &keyName, const Interest&);
+  onTimeout(uint32_t id, const Name& keyName, const Interest&);
 
   static void
   onRegisterFail(const Name& prefix, const std::string& reason);
