@@ -14,21 +14,20 @@ BOOST_AUTO_TEST_CASE(VerifierFetch)
   Verifier verifier(MpsVerifier(), face, true);
   verifier.setCertVerifyCallback([](auto&){return true;});
 
-  MpsSigner signer("/a/b/c/KEY/1234");
-  BOOST_CHECK_EQUAL(signer.getSignerKeyName(), "/a/b/c/KEY/1234");
-  auto pub = signer.getPublicKey();
+  MpsSigner mpsSigner("/a/b/c/KEY/1234");
+  BOOST_CHECK_EQUAL(mpsSigner.getSignerKeyName(), "/a/b/c/KEY/1234");
+  auto pub = mpsSigner.getPublicKey();
 
   //certificate
   security::Certificate cert;
-  cert.setName(Name(signer.getSignerKeyName())
+  cert.setName(Name(mpsSigner.getSignerKeyName())
         .append("self").appendVersion(5678));
   BufferPtr ptr = make_shared<Buffer>(blsGetSerializedPublicKeyByteSize());
   BOOST_ASSERT(blsPublicKeySerialize(ptr->data(), ptr->size(), &pub) != 0);
   cert.setContent(ptr);
   cert.setFreshnessPeriod(time::seconds(1000));
-  signer.sign(cert);
-  BOOST_ASSERT(signer.getSignerKeyName().isPrefixOf(cert.getName()));
-
+  mpsSigner.sign(cert);
+  BOOST_ASSERT(mpsSigner.getSignerKeyName().isPrefixOf(cert.getName()));
 
   //data to test
   auto data1 = make_shared<Data>();
@@ -36,13 +35,13 @@ BOOST_AUTO_TEST_CASE(VerifierFetch)
   data1->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
 
   MultipartySchema schema;
-  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
+  schema.signers.emplace_back(WildCardName(mpsSigner.getSignerKeyName()));
 
-  signer.sign(*data1);
+  mpsSigner.sign(*data1);
 
   bool received = false;
   face.onSendInterest.connect([&](const Interest& interest){
-    BOOST_CHECK_EQUAL(interest.getName(), signer.getSignerKeyName());
+    BOOST_CHECK_EQUAL(interest.getName(), mpsSigner.getSignerKeyName());
     BOOST_CHECK_EQUAL(interest.getCanBePrefix(), true);
     received = true;
   });
@@ -68,16 +67,16 @@ BOOST_AUTO_TEST_CASE(VerifierFetch2)
   util::DummyClientFace face(io, m_keyChain, {true, true});
   Verifier verifier(MpsVerifier(), face);
 
-  MpsSigner signer("/a/b/c/KEY/1234");
-  BOOST_CHECK_EQUAL(signer.getSignerKeyName(), "/a/b/c/KEY/1234");
-  auto pub = signer.getPublicKey();
-  verifier.addCert(signer.getSignerKeyName(), pub);
+  MpsSigner mpsSigner("/a/b/c/KEY/1234");
+  BOOST_CHECK_EQUAL(mpsSigner.getSignerKeyName(), "/a/b/c/KEY/1234");
+  auto pub = mpsSigner.getPublicKey();
+  verifier.addCert(mpsSigner.getSignerKeyName(), pub);
 
   //data to fetch
   Data dataF;
   dataF.setName(Name("/some/signer/list"));
   std::vector<Name> signers;
-  signers.push_back(signer.getSignerKeyName());
+  signers.push_back(mpsSigner.getSignerKeyName());
   dataF.setContent(makeNestedBlock(tlv::Content, MpsSignerList(signers)));
   dataF.setFreshnessPeriod(time::seconds(1));
   m_keyChain.sign(dataF, signingWithSha256());
@@ -88,8 +87,8 @@ BOOST_AUTO_TEST_CASE(VerifierFetch2)
   data1->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
 
   MultipartySchema schema;
-  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
-  signer.sign(*data1, SignatureInfo(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls), KeyLocator(dataF.getName())));
+  schema.signers.emplace_back(WildCardName(mpsSigner.getSignerKeyName()));
+  mpsSigner.sign(*data1, SignatureInfo(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls), KeyLocator(dataF.getName())));
 
   bool received = false;
   face.onSendInterest.connect([&](const Interest& interest){
@@ -120,8 +119,8 @@ BOOST_AUTO_TEST_CASE(VerifierFetchTimeout)
   Verifier verifier(MpsVerifier(), face);
   verifier.setCertVerifyCallback([](auto&){return true;});
 
-  MpsSigner signer("/a/b/c/KEY/1234");
-  BOOST_CHECK_EQUAL(signer.getSignerKeyName(), "/a/b/c/KEY/1234");
+  MpsSigner mpsSigner("/a/b/c/KEY/1234");
+  BOOST_CHECK_EQUAL(mpsSigner.getSignerKeyName(), "/a/b/c/KEY/1234");
 
   //data to test
   auto data1 = make_shared<Data>();
@@ -129,13 +128,13 @@ BOOST_AUTO_TEST_CASE(VerifierFetchTimeout)
   data1->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
 
   MultipartySchema schema;
-  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
+  schema.signers.emplace_back(WildCardName(mpsSigner.getSignerKeyName()));
 
-  signer.sign(*data1);
+  mpsSigner.sign(*data1);
 
   bool received = false;
   face.onSendInterest.connect([&](const Interest& interest){
-    BOOST_CHECK_EQUAL(interest.getName(), signer.getSignerKeyName());
+    BOOST_CHECK_EQUAL(interest.getName(), mpsSigner.getSignerKeyName());
     BOOST_CHECK_EQUAL(interest.getCanBePrefix(), true);
     received = true;
   });
@@ -157,12 +156,12 @@ BOOST_AUTO_TEST_CASE(VerifierListFetch)
   Verifier verifier(MpsVerifier(), face);
   verifier.setCertVerifyCallback([](auto&){return true;});
 
-  MpsSigner signer("/a/b/c");
-  BOOST_CHECK_EQUAL(signer.getSignerKeyName(), "/a/b/c");
-  auto pub = signer.getPublicKey();
+  MpsSigner mpsSigner("/a/b/c");
+  BOOST_CHECK_EQUAL(mpsSigner.getSignerKeyName(), "/a/b/c");
+  auto pub = mpsSigner.getPublicKey();
 
-  MpsSigner signer2("/a/b/d");
-  auto pub2 = signer2.getPublicKey();
+  MpsSigner mpsSigner2("/a/b/d");
+  auto pub2 = mpsSigner2.getPublicKey();
 
   verifier.addCert("/a/b/c", pub);
   verifier.addCert("/a/b/d", pub2);
@@ -172,15 +171,15 @@ BOOST_AUTO_TEST_CASE(VerifierListFetch)
   data1->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
 
   MultipartySchema schema;
-  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
-  schema.signers.emplace_back(WildCardName(signer2.getSignerKeyName()));
+  schema.signers.emplace_back(WildCardName(mpsSigner.getSignerKeyName()));
+  schema.signers.emplace_back(WildCardName(mpsSigner2.getSignerKeyName()));
 
   //add signer list
   SignatureInfo info(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls), KeyLocator("/some/signer/list"));
   data1->setSignatureInfo(info);
   MpsSignerList list;
-  list.emplace_back(signer.getSignerKeyName());
-  list.emplace_back(signer2.getSignerKeyName());
+  list.emplace_back(mpsSigner.getSignerKeyName());
+  list.emplace_back(mpsSigner2.getSignerKeyName());
   Data signerList;
   signerList.setName("/some/signer/list");
   signerList.setFreshnessPeriod(time::seconds(1000));
@@ -188,8 +187,8 @@ BOOST_AUTO_TEST_CASE(VerifierListFetch)
   m_keyChain.sign(signerList, signingWithSha256());
 
   //sign
-  auto sig1 = signer.getSignature(*data1);
-  auto sig2 = signer2.getSignature(*data1);
+  auto sig1 = mpsSigner.getSignature(*data1);
+  auto sig2 = mpsSigner2.getSignature(*data1);
 
   MpsAggregator aggregater;
   std::vector<blsSignature> signatures;
@@ -234,20 +233,20 @@ BOOST_AUTO_TEST_CASE(VerifierParallelFetch)
   verifier.setCertVerifyCallback([](auto&){return true;});
 
   //request1
-  MpsSigner signer("/a/b/c/KEY/1234");
-  BOOST_CHECK_EQUAL(signer.getSignerKeyName(), "/a/b/c/KEY/1234");
-  auto pub = signer.getPublicKey();
+  MpsSigner mpsSigner("/a/b/c/KEY/1234");
+  BOOST_CHECK_EQUAL(mpsSigner.getSignerKeyName(), "/a/b/c/KEY/1234");
+  auto pub = mpsSigner.getPublicKey();
 
   //certificate
   security::Certificate cert;
-  cert.setName(Name(signer.getSignerKeyName())
+  cert.setName(Name(mpsSigner.getSignerKeyName())
                        .append("self").appendVersion(5678));
   BufferPtr ptr = make_shared<Buffer>(blsGetSerializedPublicKeyByteSize());
   BOOST_ASSERT(blsPublicKeySerialize(ptr->data(), ptr->size(), &pub) != 0);
   cert.setContent(ptr);
   cert.setFreshnessPeriod(time::seconds(1000));
-  signer.sign(cert);
-  BOOST_ASSERT(signer.getSignerKeyName().isPrefixOf(cert.getName()));
+  mpsSigner.sign(cert);
+  BOOST_ASSERT(mpsSigner.getSignerKeyName().isPrefixOf(cert.getName()));
 
 
   //data1 to test
@@ -256,15 +255,15 @@ BOOST_AUTO_TEST_CASE(VerifierParallelFetch)
   data1->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
 
   MultipartySchema schema;
-  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
+  schema.signers.emplace_back(WildCardName(mpsSigner.getSignerKeyName()));
 
-  signer.sign(*data1);
+  mpsSigner.sign(*data1);
 
   auto data2 = make_shared<Data>();
   data2->setName(Name("/a/b/c/d/2"));
   data2->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
 
-  signer.sign(*data2, "/a/b/NotExist/KEY/1234");
+  mpsSigner.sign(*data2, "/a/b/NotExist/KEY/1234");
 
   bool received1 = false;
   bool received2 = false;
@@ -307,7 +306,7 @@ BOOST_AUTO_TEST_CASE(VerifierParallelFetch)
 BOOST_AUTO_TEST_CASE(SignerFetch)
 {
   util::DummyClientFace face(io, m_keyChain, {true, true});
-  Signer signer(MpsSigner("/a/b/c/KEY/1234"), "/signer", face);
+  Signer signer(std::make_unique<MpsSigner>("/a/b/c/KEY/1234"), "/signer", face);
   signer.setDataVerifyCallback([](auto a){return true;});
   signer.setSignatureVerifyCallback([](auto a){return true;});
 
@@ -317,7 +316,7 @@ BOOST_AUTO_TEST_CASE(SignerFetch)
   data1.setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
   data1.setFreshnessPeriod(time::seconds(1000));
   data1.setSignatureInfo(SignatureInfo(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
-                                       KeyLocator(signer.getSignerKeyName())));
+                                       KeyLocator(signer.m_signer->getSignerKeyName())));
   data1.setSignatureValue(make_shared<Buffer>());
   BOOST_CHECK_NO_THROW(data1.wireEncode());
 
@@ -347,7 +346,7 @@ BOOST_AUTO_TEST_CASE(SignerFetch)
   resultInterest.setMustBeFresh(true);
 
   MultipartySchema schema;
-  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
+  schema.signers.emplace_back(WildCardName(signer.m_signer->getSignerKeyName()));
 
   bool receivedWrapperFetch = false;
   face.onSendInterest.connect([&](const Interest& interest){
@@ -381,7 +380,7 @@ BOOST_AUTO_TEST_CASE(SignerFetch)
         auto vbuff = make_shared<Buffer>(v.value(), v.value_size());
         data1.setSignatureValue(vbuff);
         MpsVerifier verifier;
-        verifier.addCert(signer.getSignerKeyName(), signer.getPublicKey());
+        verifier.addCert(signer.m_signer->getSignerKeyName(), signer.m_signer->getPublicKey());
         BOOST_CHECK(verifier.verifySignature(data1, schema));
         BOOST_CHECK_EQUAL(data1.getSignatureValue().value_size(), blsGetSerializedSignatureByteSize());
       }
@@ -414,7 +413,7 @@ BOOST_AUTO_TEST_CASE(SignerFetch)
 BOOST_AUTO_TEST_CASE(SignerFetchTimeout)
 {
   util::DummyClientFace face(io, m_keyChain, {true, true});
-  Signer signer(MpsSigner("/a/b/c/KEY/1234"), "/signer", face);
+  Signer signer(std::make_unique<MpsSigner>("/a/b/c/KEY/1234"), "/signer", face);
   signer.setDataVerifyCallback([](auto a){return true;});
   signer.setSignatureVerifyCallback([](auto a){return true;});
 
@@ -443,7 +442,7 @@ BOOST_AUTO_TEST_CASE(SignerFetchTimeout)
   resultInterest.setMustBeFresh(true);
 
   MultipartySchema schema;
-  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
+  schema.signers.emplace_back(WildCardName(signer.m_signer->getSignerKeyName()));
 
   bool receivedWrapperFetch = false;
   face.onSendInterest.connect([&](const Interest& interest){
@@ -501,7 +500,7 @@ BOOST_AUTO_TEST_CASE(SignerFetchTimeout)
 BOOST_AUTO_TEST_CASE(SignerFetchNotFound)
 {
   util::DummyClientFace face(io, m_keyChain, {true, true});
-  Signer signer(MpsSigner("/a/b/c/KEY/1234"), "/signer", face);
+  Signer signer(std::make_unique<MpsSigner>("/a/b/c/KEY/1234"), "/signer", face);
   signer.setDataVerifyCallback([](auto a){return true;});
   signer.setSignatureVerifyCallback([](auto a){return true;});
 
@@ -523,7 +522,7 @@ BOOST_AUTO_TEST_CASE(SignerFetchNotFound)
   resultInterest.setMustBeFresh(true);
 
   MultipartySchema schema;
-  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
+  schema.signers.emplace_back(WildCardName(signer.m_signer->getSignerKeyName()));
 
   bool result1_received = false;
   face.onSendData.connect([&](const Data& data){
@@ -551,7 +550,7 @@ BOOST_AUTO_TEST_CASE(SignerFetchNotFound)
 BOOST_AUTO_TEST_CASE(SignerFetchBadInit)
 {
   util::DummyClientFace face(io, m_keyChain, {true, true});
-  Signer signer(MpsSigner("/a/b/c/KEY/1234"), "/signer", face);
+  Signer signer(std::make_unique<MpsSigner>("/a/b/c/KEY/1234"), "/signer", face);
   signer.setDataVerifyCallback([](auto a){return true;});
   signer.setSignatureVerifyCallback([](auto a){return true;});
 
@@ -561,7 +560,7 @@ BOOST_AUTO_TEST_CASE(SignerFetchBadInit)
   data1.setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
   data1.setFreshnessPeriod(time::seconds(1000));
   data1.setSignatureInfo(SignatureInfo(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
-                                       KeyLocator(signer.getSignerKeyName())));
+                                       KeyLocator(signer.m_signer->getSignerKeyName())));
   data1.setSignatureValue(make_shared<Buffer>());
   BOOST_CHECK_NO_THROW(data1.wireEncode());
 
@@ -610,7 +609,7 @@ BOOST_AUTO_TEST_CASE(SignerFetchBadInit)
 BOOST_AUTO_TEST_CASE(SignerFetchBadWrapper)
 {
   util::DummyClientFace face(io, m_keyChain, {true, true});
-  Signer signer(MpsSigner("/a/b/c/KEY/1234"), "/signer", face);
+  Signer signer(std::make_unique<MpsSigner>("/a/b/c/KEY/1234"), "/signer", face);
   signer.setDataVerifyCallback([](auto a){return true;});
   signer.setSignatureVerifyCallback([](auto a){return true;});
 
@@ -639,7 +638,7 @@ BOOST_AUTO_TEST_CASE(SignerFetchBadWrapper)
   resultInterest.setMustBeFresh(true);
 
   MultipartySchema schema;
-  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
+  schema.signers.emplace_back(WildCardName(signer.m_signer->getSignerKeyName()));
 
   bool receivedWrapperFetch = false;
   face.onSendInterest.connect([&](const Interest& interest){
@@ -700,7 +699,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTest)
 {
   m_keyChain.createIdentity("/initiator");
   util::DummyClientFace signerFace(io, m_keyChain, {true, true});
-  Signer signer(MpsSigner("/a/b/c/KEY/1234"), "/signer", signerFace);
+  Signer signer(std::make_unique<MpsSigner>("/a/b/c/KEY/1234"), "/signer", signerFace);
   signer.setDataVerifyCallback([](auto a) { return true; });
   signer.setSignatureVerifyCallback([](auto a) { return true; });
 
@@ -708,7 +707,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTest)
   Scheduler scheduler(io);
   Initiator initiator(MpsVerifier(), "/initiator", initiatorFace, scheduler, m_keyChain,
                       m_keyChain.getPib().getIdentity("/initiator").getDefaultKey().getName());
-  initiator.addSigner(signer.getSignerKeyName(), signer.getPublicKey(), "/signer");
+  initiator.addSigner(signer.m_signer->getSignerKeyName(), signer.m_signer->getPublicKey(), "/signer");
   initiatorFace.linkTo(signerFace);
 
   //data to test
@@ -718,7 +717,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTest)
   data1->setFreshnessPeriod(time::seconds(1000));
 
   MultipartySchema schema;
-  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
+  schema.signers.emplace_back(WildCardName(signer.m_signer->getSignerKeyName()));
 
   Name wrapperName;
   Name resultName;
@@ -801,7 +800,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTest)
                              const auto &content = signerListData.getContent();
                              content.parse();
                              MpsVerifier mpsVerifier;
-                             mpsVerifier.addCert(signer.getSignerKeyName(), signer.getPublicKey());
+                             mpsVerifier.addCert(signer.m_signer->getSignerKeyName(), signer.m_signer->getPublicKey());
                              BOOST_CHECK(content.get(tlv::MpsSignerList).isValid());
                              BOOST_CHECK_NO_THROW(mpsVerifier.addSignerList(signerListData.getName(),
                                                                             MpsSignerList(
@@ -823,14 +822,14 @@ BOOST_AUTO_TEST_CASE(InitiatorTest)
 BOOST_AUTO_TEST_CASE(InitiatorTestTimeout)
 {
   m_keyChain.createIdentity("/initiator");
-  MpsSigner signer("/a/b/c/KEY/1234");
+  MpsSigner mpsSigner("/a/b/c/KEY/1234");
 
   util::DummyClientFace initiatorFace(io, m_keyChain, {true, true});
   MpsVerifier mpsVerifier;
   Scheduler scheduler(io);
   Initiator initiator(mpsVerifier, "/initiator", initiatorFace, scheduler, m_keyChain,
                       m_keyChain.getPib().getIdentity("/initiator").getDefaultKey().getName());
-  initiator.addSigner(signer.getSignerKeyName(), signer.getPublicKey(), "/signer");
+  initiator.addSigner(mpsSigner.getSignerKeyName(), mpsSigner.getPublicKey(), "/signer");
 
   //data to test
   auto data1 = make_shared<Data>();
@@ -839,7 +838,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTestTimeout)
   data1->setFreshnessPeriod(time::seconds(1000));
 
   MultipartySchema schema;
-  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
+  schema.signers.emplace_back(WildCardName(mpsSigner.getSignerKeyName()));
 
   Name wrapperName;
 
@@ -881,7 +880,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTestUnauthorized)
 {
   m_keyChain.createIdentity("/initiator");
   util::DummyClientFace signerFace(io, m_keyChain, {true, true});
-  Signer signer(MpsSigner("/a/b/c/KEY/1234"), "/signer", signerFace);
+  Signer signer(std::make_unique<MpsSigner>("/a/b/c/KEY/1234"), "/signer", signerFace);
   signer.setDataVerifyCallback([](auto a) { return true; });
   signer.setSignatureVerifyCallback([](auto a) { return false; });
 
@@ -889,7 +888,8 @@ BOOST_AUTO_TEST_CASE(InitiatorTestUnauthorized)
   MpsVerifier mpsVerifier;
   Scheduler scheduler(io);
   Initiator initiator(mpsVerifier, "/initiator", initiatorFace, scheduler, m_keyChain,
-                      m_keyChain.getPib().getIdentity("/initiator").getDefaultKey().getName());initiator.addSigner(signer.getSignerKeyName(), signer.getPublicKey(), "/signer");
+                      m_keyChain.getPib().getIdentity("/initiator").getDefaultKey().getName());
+  initiator.addSigner(signer.m_signer->getSignerKeyName(), signer.m_signer->getPublicKey(), "/signer");
   initiatorFace.linkTo(signerFace);
 
   //data to test
@@ -899,7 +899,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTestUnauthorized)
   data1->setFreshnessPeriod(time::seconds(1000));
 
   MultipartySchema schema;
-  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
+  schema.signers.emplace_back(WildCardName(signer.m_signer->getSignerKeyName()));
 
   Name wrapperName;
   bool replied = false;
@@ -953,7 +953,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTestDataVerifyFail)
 {
   m_keyChain.createIdentity("/initiator");
   util::DummyClientFace signerFace(io, m_keyChain, {true, true});
-  Signer signer(MpsSigner("/a/b/c/KEY/1234"), "/signer", signerFace);
+  Signer signer(std::make_unique<MpsSigner>("/a/b/c/KEY/1234"), "/signer", signerFace);
   signer.setDataVerifyCallback([](auto a) { return false; });
   signer.setSignatureVerifyCallback([](auto a) { return true; });
 
@@ -962,7 +962,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTestDataVerifyFail)
   Scheduler scheduler(io);
   Initiator initiator(mpsVerifier, "/initiator", initiatorFace, scheduler, m_keyChain,
                       m_keyChain.getPib().getIdentity("/initiator").getDefaultKey().getName());
-  initiator.addSigner(signer.getSignerKeyName(), signer.getPublicKey(), "/signer");
+  initiator.addSigner(signer.m_signer->getSignerKeyName(), signer.m_signer->getPublicKey(), "/signer");
   initiatorFace.linkTo(signerFace);
 
   //data to test
@@ -972,7 +972,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTestDataVerifyFail)
   data1->setFreshnessPeriod(time::seconds(1000));
 
   MultipartySchema schema;
-  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
+  schema.signers.emplace_back(WildCardName(signer.m_signer->getSignerKeyName()));
 
   Name wrapperName;
   Name resultName;
@@ -1067,18 +1067,18 @@ BOOST_AUTO_TEST_CASE(InitiatorTestBadSignature)
 {
   m_keyChain.createIdentity("/initiator");
   util::DummyClientFace signerFace(io, m_keyChain, {true, true});
-  Signer signer(MpsSigner("/a/b/c/KEY/1234"), "/signer", signerFace);
+  Signer signer(std::make_unique<MpsSigner>("/a/b/c/KEY/1234"), "/signer", signerFace);
   signer.setDataVerifyCallback([](auto a) { return true; });
   signer.setSignatureVerifyCallback([](auto a) { return true; });
 
-  BOOST_CHECK(!blsPublicKeyIsEqual(&signer.getPublicKey(), &MpsSigner("/a/b/c/KEY/1234").getPublicKey()));
+  BOOST_CHECK(!blsPublicKeyIsEqual(&signer.m_signer->getPublicKey(), &MpsSigner("/a/b/c/KEY/1234").getPublicKey()));
 
   util::DummyClientFace initiatorFace(io, m_keyChain, {true, true});
   MpsVerifier mpsVerifier;
   Scheduler scheduler(io);
   Initiator initiator(mpsVerifier, "/initiator", initiatorFace, scheduler, m_keyChain,
                       m_keyChain.getPib().getIdentity("/initiator").getDefaultKey().getName());
-  initiator.addSigner(signer.getSignerKeyName(), MpsSigner("/a/b/c/KEY/1234").getPublicKey(), "/signer"); // bad key
+  initiator.addSigner(signer.m_signer->getSignerKeyName(), MpsSigner("/a/b/c/KEY/1234").getPublicKey(), "/signer"); // bad key
   initiatorFace.linkTo(signerFace);
 
   //data to test
@@ -1088,7 +1088,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTestBadSignature)
   data1->setFreshnessPeriod(time::seconds(1000));
 
   MultipartySchema schema;
-  schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
+  schema.signers.emplace_back(WildCardName(signer.m_signer->getSignerKeyName()));
 
   Name wrapperName;
   Name resultName;

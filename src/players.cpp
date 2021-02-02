@@ -12,8 +12,8 @@ NDN_LOG_INIT(ndnmps.players);
 const time::milliseconds TIMEOUT = time::seconds(4);
 const time::milliseconds ESTIMATE_PROCESS_TIME = time::seconds(1);
 
-Signer::Signer(MpsSigner mpsSigner, const Name& prefix, Face& face)
-    : MpsSigner(std::move(mpsSigner))
+Signer::Signer(std::unique_ptr<MpsSigner> mpsSigner, const Name& prefix, Face& face)
+    : m_signer(std::move(mpsSigner))
     , m_prefix(prefix)
     , m_face(face)
 {
@@ -182,7 +182,7 @@ Signer::reply(const Name& interestName, ConstBufferPtr requestId) const
   }
   data.setContent(block);
   data.setFreshnessPeriod(TIMEOUT);
-  sign(data);
+  m_signer->sign(data);
   m_face.put(data);
 }
 
@@ -199,7 +199,7 @@ Signer::replyError(const Name& interestName, ReplyCode errorCode) const
   data.setContent(Block(tlv::Content, makeStringBlock(tlv::Status,
                                                       std::to_string(static_cast<int>(errorCode)))));
   data.setFreshnessPeriod(TIMEOUT);
-  sign(data);
+  m_signer->sign(data);
   m_face.put(data);
 }
 
@@ -255,7 +255,7 @@ Signer::onData(const Interest& interest, const Data& data)
     return;
   }
   //sign
-  state.value = getSignature(unsignedData);
+  state.value = m_signer->getSignature(unsignedData);
 
   //cleanup
   m_unsignedNames.erase(interest.getName());

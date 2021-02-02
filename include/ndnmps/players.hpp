@@ -17,7 +17,7 @@ namespace ndn {
  * The signer class class that handles functionality in the multi-signing protocol.
  * Note that it is different from MpsSigner, which only provides signing and packet encoding.
  */
-class Signer : public MpsSigner {
+class Signer {
 private:
   Name m_prefix;
   Face& m_face;
@@ -35,13 +35,16 @@ private:
   std::map<Name, Buffer> m_unsignedNames;
 
 public:
+  std::unique_ptr<MpsSigner> m_signer;
+
+public:
   /**
    * Construct the signer participant in the protocol
    * @param mpsSigner the signer that signs data
    * @param prefix the routable prefix to register prefix to
    * @param face the network interface.
    */
-  Signer(MpsSigner mpsSigner, const Name& prefix, Face& face);
+  Signer(std::unique_ptr<MpsSigner> mpsSigner, const Name& prefix, Face& face);
 
   /**
    * the destructor. Currently remove the prefix registration.
