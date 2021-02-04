@@ -72,7 +72,7 @@ Packets:
 Phase 1 consists of multiple transactions between `I` and each `S` (`S`1 to `S`n).
 Specifically, for each `I` and `S`, the protocol sets:
 
-* `I` sends an Interest packet `SignRequest` to signer `S`. The packet is signed by `I` so that S can verifies I's identity and packet's authenticity.
+* `I` sends an Interest packet `SignRequest` to signer `S`. The packet is signed by `I` so that `S` can verifies `I`'s identity and packet's authenticity.
 
   * Name: `/S/mps/sign/[hash]`
   * Application parameter:
@@ -102,7 +102,7 @@ Specifically, for each `I` and `S`, the protocol sets:
 
     * (Encrypted) `D_Unsigned` Data packet.
 
-  * Signature: SHA256
+  * Signature: HAMC
 
 * `S` fetches the `ParameterData` using the name in `SignRequest.Unsigned_Wrapper_Name`. The order of this step and last step can be switched.
 
@@ -118,8 +118,7 @@ Specifically, for each `I` and `S`, the protocol sets:
     * (Encrypted) `Result_name`, a new future result Data packet name `D_Signed_S.Name` whose randomness is renewed.
     * (Encrypted) (Only when 200 OK) Signature Value of `D_Signed_S`. Note the keylocator must be `SignRequest.KeyLocator_Name`
 
-  * Signature info: SHA256 signature
-  * Signature Value: SHA256
+  * Signature: HAMC
 
 * `I` fetches the `ResultData` packet. If `S` is not ready for the result, will return the packet containing the corresponding `status` code and renew the randomness for the next result packet.
 
@@ -199,8 +198,12 @@ Obtained by the use of underlying BLS.
 
 ### Replay Attack
 
-* `SignRequest` Interest packet. Even it is replied, the attacker gain no information from the `Ack` Data packet. Timestamp should be used to reduce the chance of reply.
+Each `SignRequest` will start a new request process between `I` and `S`. In this process, each packet's name is unique and these Data packets cannot be replayed to other request processes.
+In addition, after the first round trip, the Interest and Data packet names are not predictable to anyone other than `I` and `S`.
+All sensitive content is also encrypted with AES key derived from ECDH, thus reveal no information.
+
+* `SignRequest` Interest packet. Even it is replied, the attacker gain no information from the `Ack` Data packet because of lack of the private key for ECDH. Timestamp should be used to reduce the chance of reply.
 * Since each `SignRequest` is unique for each request. An old `Ack` Data packet cannot be replayed.
-* `ParameterData` Interest is unique for each request and the `ParameterData` Data is encrypted with AES key derived from ECDH, thus reveal no information.
-* Each `ResultData` Interest is unique and only appear once. In addition, it is unknown to the attacker because its name is encrypted.
-* Each `ResultData` Data is unique for each request. An old `ResultData` Data packet cannot be replayed.
+* `ParameterData` Interest is unique for each request and the `ParameterData` Data is encrypted with AES key derived from ECDH, thus revealing no information.
+* Each `ResultData` Interest is unique, not predictable to the external, and only appears once.
+* Each `ResultData` Data is unique for each `ResultData` Interest. An old `ResultData` Data packet cannot be replayed.
