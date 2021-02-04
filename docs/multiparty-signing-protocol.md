@@ -2,14 +2,15 @@
 
 **Author**: Zhiyi Zhang, Siqi Liu
 
-**Versions**: v2 (Dec 23, 2020) obsolete v1 (Dec 15, 2020)
+**Versions**: v0.3 (Feb 4, 2021) obsolete v0.2 (Dec 23, 2020) v0.1 (Dec 15, 2020)
 
 ## Design Principles
 
 * Each signed packet, including a not-yet-aggregated signed packet, should be identified by a different name (unique packet, unique name).
 * The packets signed by signers can be merged into a single packet (that's why we use BLS).
 * Each aggregated packet should refer the signing information to the scheme and other information so that a verfier has enough knowledge to know which keys should be used in verification (key info is needed for a signature with complex semantics).
-* This library is a supporting library to multi-sign a packet based on the application needs, so our library aims to make minimum change to the application logic (e.g., name and content of packet to be signed).
+* This library is a supporting library to multi-sign a packet based on the application needs, so our library aims to make minimum interference to the application logic (e.g., name and content of packet to be signed).
+* Preserve the confidentiality of the unsigned command in the negotiation process.
 
 ## Overview
 
@@ -33,6 +34,8 @@ In practice, a node can play more than one roles
 
 * We utilize a new NDN based RPC to collect signatures from signers, modified from RICE (ICN 2019).
 * We propose a new type of key locator to carry complicated signature information. In our case, is the schema and the exact keys involved in the signature signing.
+* We propose a new format of trust schema to allow multiparty trust
+* We preserve the confidentiality of the unsigned command during the negotiation process.
 
 ### Assumptions
 
@@ -59,7 +62,10 @@ Packets:
 
 ---
 
-**Input**: A scheme defined by the application.
+**Input**:
+
+* A scheme defined by the application.
+* Public keys (elliptic curve supporting type 3 bilinear pairing `G`, group generator `g`, public key `g^x` where `x` is a signer's private key) of the involved signers.
 
 **Output**: A sufficient number of signed packets replied from signers.
 
@@ -71,35 +77,49 @@ Specifically, for each `I` and `S`, the protocol sets:
   * Name: `/S/mps/sign/[hash]`
   * Application parameter:
 
-    * `Unsigned_Wrapper_Name` + implicit digest, The name of a wrapper packet whose content is `D_Unsigned`. When the data object to be signed contains more than one packets, e.g., a large file, a manifest Data packet should be put here.
+    * `Unsigned_Wrapper_Name`. The name of a wrapper packet whose content is `D_Unsigned`. When the data object to be signed contains more than one packets, e.g., a large file, a manifest Data packet containing the Merkle Tree root of packets should be used here. `Unsigned_Wrapper_Name` should reveal no information of the command to be signed.
+    * `ecdh-pub`, the public key for ECDH.
     * Optional `ForwardingHint`, the forwarding hint of the initiator.
 
   * Signature: Signed by `I`'s key
 
 * `S` verifies the Interest packet and replies `Ack`, an acknowledgement of the request if `S` is available.
 
-    * Name: `/S/mps/sign/[hash]`
-    * Content:
+  * Name: `/S/mps/sign/[hash]`
+  * Content:
 
-      * `Status`, Status code: 102 Processing, 500 Internal Error, 503 Unavailable
-      * `Result_after`, Estimated time of finishing the signing process.
-      * `Result_name`, the future result Data packet name `D_Signed_S.Name` (does not contain version, timestamp, or implicit digest).
+    * `ecdh-pub`, the public key for ECDH.
+    * (Encrypted) `Status`, Status code: 102 Processing, 500 Internal Error, 503 Unavailable
+    * (Encrypted) `Result_after`, Estimated time of finishing the signing process.
+    * (Encrypted) `Result_name`, the future result Data packet name `D_Signed_S.Name`.
 
-    * Signature: Signed by `S`'s key
+  * Signature: Signed by `S`'s key
 
-* `S` fetches the wrapper Data using the name in `SignRequest.Unsigned_Wrapper_Name`, verifies its digest against the implicit digest name component. If succeeds and `S` agrees to sign it, `S` uses its private key to sign the packet `D_Signed_S` and put the signature value into the result packet. Then, `S` publishes the result packet.
+* `I` generates the `ParameterData` Data packet.
 
-  * Data Name: `/S/mps/result-of/[SignRequest.digest]/[version-num]`
+  * Name: `/I/mps/param/[randomness]`
+  * Content:
+
+    * (Encrypted) `D_Unsigned` Data packet.
+
+  * Signature: SHA256
+
+* `S` fetches the `ParameterData` using the name in `SignRequest.Unsigned_Wrapper_Name`. If `S` agrees to sign it, `S` uses its private key to sign the packet `D_Signed_S` and put the signature value into the result packet. Then, `S` publishes the result packet.
+
+  * Data Name: `/S/mps/result-of/[SignRequest.digest]/[Randomness]`
   * Data content:
 
-    * `Status`, Status code: 102 Processing, 200 OK,
+    * (Encrypted) `Status`, Status code: 102 Processing, 200 OK,
                 404 Not Found, 401 Unauthorized, 424 Failed Dependency,
                 500 Internal Error, 503 Unavailable,
-    * (Only when 200 OK) Signature Value of `D_Signed_S`.
-      Note the keylocator must be `SignRequest.KeyLocator_Name`
+    * (Encrypted) `Result_after`, Estimated time of finishing the signing process.
+    * (Encrypted) `Result_name`, a new future result Data packet name `D_Signed_S.Name` whose randomness is renewed.
+    * (Encrypted) (Only when 200 OK) Signature Value of `D_Signed_S`. Note the keylocator must be `SignRequest.KeyLocator_Name`
 
   * Signature info: SHA256 signature
   * Signature Value: SHA256
+
+* `I` fetches the `ResultData` packet. If `S` is not ready for the result, will return the packet containing the corresponding `status` code and renew the randomness for the next result packet.
 
 ### Phase 2: Signature Aggregation
 
@@ -146,3 +166,39 @@ Now `I` will:
 * `V` then check the `schema` against its own policies
 
 If all the checks succeed, the signature is valid. Otherwise, invalid.
+
+## Security Consideration
+
+### Multiparty Authentication
+
+Obtained by the use of underlying BLS.
+
+### Privacy in Signature Collection Phase
+
+* `SignRequest` Interest packet does not leak information of the command to be signed because:
+
+  * Packet name `/S/mps/sign/[hash]` is random
+  * Packet content: `Unsigned_Wrapper_Name` reveals no information of the command
+
+* `Ack` Data packet does not does not leak information of the command to be signed because:
+
+  * Packet name `/S/mps/sign/[hash]` is same as `SignRequest`
+  * Packet content is encrypted with the AES GCM key from the ECDH, forward secrecy
+
+* `ParameterData` Interest is `Unsigned_Wrapper_Name`, which reveals no information of the command
+* `ParameterData` Data content is encrypted with the AES GCM key from the ECDH, forward secrecy
+* `ResultData` Interest packet
+
+  * Packet Name `/S/mps/result-of/[SignRequest.digest]/[Randomness]`, which reveals no information of the command.
+
+* `ResultData` Data packet
+
+  * Packet Content is encrypted
+
+### Replay Attack
+
+* `SignRequest` Interest packet. Even it is replied, the attacker gain no information from the `Ack` Data packet. Timestamp should be used to reduce the chance of reply.
+* Since each `SignRequest` is unique for each request. An old `Ack` Data packet cannot be replayed.
+* `ParameterData` Interest is unique for each request and the `ParameterData` Data is encrypted with AES key derived from ECDH, thus reveal no information.
+* Each `ResultData` Interest is unique and only appear once. In addition, it is unknown to the attacker because its name is encrypted.
+* Each `ResultData` Data is unique for each request. An old `ResultData` Data packet cannot be replayed.
