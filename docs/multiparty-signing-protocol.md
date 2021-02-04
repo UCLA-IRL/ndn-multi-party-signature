@@ -72,14 +72,14 @@ Packets:
 Phase 1 consists of multiple transactions between `I` and each `S` (`S`1 to `S`n).
 Specifically, for each `I` and `S`, the protocol sets:
 
-* `I` sends an Interest packet `SignRequest` to signer `S`. The packet is signed by I so that S can verifies I's identity and packet's authenticity.
+* `I` sends an Interest packet `SignRequest` to signer `S`. The packet is signed by `I` so that S can verifies I's identity and packet's authenticity.
 
   * Name: `/S/mps/sign/[hash]`
   * Application parameter:
 
     * `Unsigned_Wrapper_Name`. The name of a wrapper packet whose content is `D_Unsigned`. When the data object to be signed contains more than one packets, e.g., a large file, a manifest Data packet containing the Merkle Tree root of packets should be used here. `Unsigned_Wrapper_Name` should reveal no information of the command to be signed.
     * `ecdh-pub`, the public key for ECDH.
-    * Optional `ForwardingHint`, the forwarding hint of the initiator.
+    * Optional `ForwardingHint`, the forwarding hint of the initiator `I` if `I` is not publicly reachable.
 
   * Signature: Signed by `I`'s key
 
@@ -104,7 +104,9 @@ Specifically, for each `I` and `S`, the protocol sets:
 
   * Signature: SHA256
 
-* `S` fetches the `ParameterData` using the name in `SignRequest.Unsigned_Wrapper_Name`. If `S` agrees to sign it, `S` uses its private key to sign the packet `D_Signed_S` and put the signature value into the result packet. Then, `S` publishes the result packet.
+* `S` fetches the `ParameterData` using the name in `SignRequest.Unsigned_Wrapper_Name`. The order of this step and last step can be switched.
+
+* If `S` agrees to sign the data, `S` uses its private key to sign the packet `D_Signed_S` and put the signature value into the result packet. Then, `S` publishes the result packet.
 
   * Data Name: `/S/mps/result-of/[SignRequest.digest]/[Randomness]`
   * Data content:
