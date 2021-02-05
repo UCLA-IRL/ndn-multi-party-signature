@@ -7,6 +7,7 @@
 #include "mps-signer-list.hpp"
 
 namespace ndn {
+namespace mps {
 
 /**
  * A class to store wild card name that can wildcard match other names.
@@ -102,6 +103,7 @@ public:
   getMinSigners(const std::vector<Name>& availableKeys) const;
 };
 
+}  // namespace mps
 }  // namespace ndn
 
 #endif  // NDNMPS_SCHEMA_HPP

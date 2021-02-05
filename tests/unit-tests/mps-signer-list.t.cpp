@@ -2,7 +2,7 @@
 #include "test-common.hpp"
 
 namespace ndn {
-namespace ndnmps {
+namespace mps {
 namespace tests {
 
 BOOST_AUTO_TEST_SUITE(TestMpsSignerList)
@@ -19,8 +19,7 @@ BOOST_AUTO_TEST_CASE(EmptyList)
   //   printf("0x%02x, ", *it);
   // }
   static const uint8_t expected[] = {
-          tlv::MpsSignerList, 0x00
-  };
+      tlv::MpsSignerList, 0x00};
   BOOST_CHECK_EQUAL_COLLECTIONS(expected, expected + sizeof(expected),
                                 wire.begin(), wire.end());
 
@@ -41,9 +40,8 @@ BOOST_AUTO_TEST_CASE(Encoding)
   //   printf("0x%02x, ", *it);
   // }
   static const uint8_t expected[] = {
-          tlv::MpsSignerList, 0x05,
-            tlv::Name, 0x03, tlv::GenericNameComponent, 0x01, 'A'
-  };
+      tlv::MpsSignerList, 0x05,
+      ndn::tlv::Name, 0x03, ndn::tlv::GenericNameComponent, 0x01, 'A'};
   BOOST_CHECK_EQUAL_COLLECTIONS(expected, expected + sizeof(expected),
                                 wire.begin(), wire.end());
 
@@ -90,8 +88,6 @@ BOOST_AUTO_TEST_CASE(Equality)
 
 BOOST_AUTO_TEST_SUITE_END()  // TestMpsSignerList
 
-} // namespace tests
-} // namespace ndnmps
-} // namespace ndn
-
-
+}  // namespace tests
+}  // namespace mps
+}  // namespace ndn

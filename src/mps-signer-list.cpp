@@ -1,11 +1,8 @@
-//
-// Created by Tyler on 12/29/20.
-//
-
 #include "ndnmps/mps-signer-list.hpp"
 #include <utility>
 
 namespace ndn {
+namespace mps {
 
 MpsSignerList::MpsSignerList(std::vector<Name>&& signers)
     : std::vector<Name>(std::move(signers))
@@ -47,7 +44,7 @@ void
 MpsSignerList::wireDecode(const Block& wire)
 {
   if (wire.type() != tlv::MpsSignerList)
-    NDN_THROW(tlv::Error("MultiPartySignerList", wire.type()));
+    NDN_THROW(ndn::tlv::Error("MultiPartySignerList", wire.type()));
   clear();
   wire.parse();
   for (const auto& item : wire.elements()) {
@@ -65,4 +62,5 @@ operator<<(std::ostream& os, const MpsSignerList& signerList)
   return os << "]";
 }
 
+}  // namespace mps
 }  // namespace ndn

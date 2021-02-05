@@ -6,6 +6,7 @@
 #include <utility>
 
 namespace ndn {
+namespace mps {
 
 NDN_LOG_INIT(ndnmps.players);
 
@@ -164,7 +165,7 @@ Signer::reply(const Name& interestName, ConstBufferPtr requestId) const
     data.setName(interestName);
   }
 
-  Block block(tlv::Content);
+  Block block(ndn::tlv::Content);
   block.push_back(makeStringBlock(tlv::Status,
                                   std::to_string(static_cast<int>(it->second.status))));
   if (it->second.status == ReplyCode::Processing) {
@@ -500,13 +501,13 @@ Initiator::multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> 
   std::array<uint8_t, 8> wrapperBuf = {};
   random::generateSecureBytes(wrapperBuf.data(), 8);
   currentRecord.unsignedData->setSignatureInfo(
-      SignatureInfo(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
+      SignatureInfo(static_cast<ndn::tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
                     KeyLocator(Name(m_prefix).append("mps").append("signers").append(toHex(wrapperBuf.data(), 8)))));
   currentRecord.unsignedData->setSignatureValue(make_shared<Buffer>());  // placeholder
 
   //wrapper
   currentRecord.wrapper.setName(Name(m_prefix).append("mps").append("wrapper").append(toHex(wrapperBuf.data(), 8)));
-  currentRecord.wrapper.setContent(makeNestedBlock(tlv::Content, *currentRecord.unsignedData));
+  currentRecord.wrapper.setContent(makeNestedBlock(ndn::tlv::Content, *currentRecord.unsignedData));
   currentRecord.wrapper.setFreshnessPeriod(TIMEOUT);
   if (m_signer.index() == 0) {
     m_signer.get<0>().first.sign(currentRecord.wrapper, signingByKey(m_signer.get<0>().second));
@@ -521,7 +522,7 @@ Initiator::multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> 
   for (const Name& i : currentRecord.availableKeys) {
     Interest interest;
     interest.setName(Name(m_keyToPrefix.at(i)).append("mps").append("sign"));
-    Block appParam(tlv::ApplicationParameters);
+    Block appParam(ndn::tlv::ApplicationParameters);
     appParam.push_back(makeNestedBlock(tlv::UnsignedWrapperName, wrapperFullName));
     interest.setApplicationParameters(appParam);
     interest.setInterestLifetime(TIMEOUT);
@@ -621,7 +622,7 @@ Initiator::onData(uint32_t id, const Name& keyName, const Data& data)
   else if (status == ReplyCode::OK) {
     // add to record, may call success
 
-    const Block& b = content.get(tlv::SignatureValue);
+    const Block& b = content.get(ndn::tlv::SignatureValue);
     if (!b.isValid()) {
       NDN_LOG_ERROR("Signer OK but bad signature value decoding failed: data for" << data.getName());
       keyLossTimeout(id, keyName);
@@ -764,4 +765,5 @@ Initiator::keyLossTimeout(uint32_t id, const Name& keyName)
   }
 }
 
+}  // namespace mps
 }  // namespace ndn

@@ -18,6 +18,7 @@
 #endif
 
 namespace ndn {
+namespace mps {
 namespace tlv {
 
 /**
@@ -38,8 +39,6 @@ enum MpsSignatureTypeValue : uint16_t {
   SignatureSha256WithBls = 64,
 };
 
-std::ostream&
-operator<<(std::ostream& os, MpsSignatureTypeValue st);
 }  // namespace tlv
 
 /**
@@ -56,6 +55,6 @@ enum class ReplyCode : int {
   Unavailable = 503,
 };
 
-}  // namespace ndn
-
+} // namespace mps
+} // namespace ndn
 #endif  // NDNMPS_COMMON_HPP

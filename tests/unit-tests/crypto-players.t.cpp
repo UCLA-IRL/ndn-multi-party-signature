@@ -2,7 +2,7 @@
 #include "test-common.hpp"
 
 namespace ndn {
-namespace ndnmps {
+namespace mps {
 namespace tests {
 
 BOOST_AUTO_TEST_SUITE(TestCryptoPlayers)
@@ -14,7 +14,7 @@ BOOST_AUTO_TEST_CASE(TestSignerPublicKey)
   auto pub = signer.getPublicKey();
   auto pubStr = signer.getpublicKeyStr();
   blsPublicKey pub2;
-  BOOST_ASSERT( blsPublicKeyDeserialize(&pub2, pubStr.data(), pubStr.size())!= 0);
+  BOOST_ASSERT(blsPublicKeyDeserialize(&pub2, pubStr.data(), pubStr.size()) != 0);
   BOOST_ASSERT(blsPublicKeyIsEqual(&pub, &pub2));
 }
 
@@ -29,7 +29,7 @@ BOOST_AUTO_TEST_CASE(TestSignerVerifier)
 
   Data data1;
   data1.setName(Name("/a/b/c/d"));
-  data1.setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1.setContent(Name("/1/2/3/4").wireEncode());
 
   MultipartySchema schema;
   schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
@@ -50,7 +50,7 @@ BOOST_AUTO_TEST_CASE(TestSignerVerifierBadKey)
 
   Data data1;
   data1.setName(Name("/a/b/c/d"));
-  data1.setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1.setContent(Name("/1/2/3/4").wireEncode());
 
   MultipartySchema schema;
   schema.signers.emplace_back(WildCardName("/q/w/e/r"));
@@ -70,13 +70,13 @@ BOOST_AUTO_TEST_CASE(TestSignerVerifierBadSig)
 
   Data data1;
   data1.setName(Name("/a/b/c/d"));
-  data1.setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1.setContent(Name("/1/2/3/4").wireEncode());
 
   MultipartySchema schema;
   schema.signers.emplace_back(WildCardName(WildCardName(signer.getSignerKeyName())));
 
   signer.sign(data1);
-  data1.setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4/5"))); //changed content
+  data1.setContent(Name("/1/2/3/4/5").wireEncode());  //changed content
   BOOST_ASSERT(!verifier.verifySignature(data1, schema));
 }
 
@@ -91,7 +91,7 @@ BOOST_AUTO_TEST_CASE(TestSignerVerifierInterest)
 
   Interest interest;
   interest.setName(Name("/a/b/c/d"));
-  interest.setApplicationParameters(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  interest.setApplicationParameters(Name("/1/2/3/4").wireEncode());
 
   signer.sign(interest);
   BOOST_CHECK(verifier.verifySignature(interest));
@@ -109,7 +109,7 @@ BOOST_AUTO_TEST_CASE(TestSignerVerifierInterestBadSig)
 
   Interest interest;
   interest.setName(Name("/a/b/c/d"));
-  interest.setApplicationParameters(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  interest.setApplicationParameters(Name("/1/2/3/4").wireEncode());
 
   MpsSigner signer2("/a/b/c");
   signer2.sign(interest);
@@ -128,11 +128,10 @@ BOOST_AUTO_TEST_CASE(TestSignerVerifierSelfCert)
   MultipartySchema schema;
   schema.signers.emplace_back(signer.getSignerKeyName());
 
-  auto cert = signer.getSelfSignCert(
-          security::ValidityPeriod(time::system_clock::now() - time::seconds(1), time::system_clock::now() + time::days(100)));
+  auto cert = signer.getSelfSignCert(security::ValidityPeriod(time::system_clock::now() - time::seconds(1),
+                                                              time::system_clock::now() + time::days(100)));
 
-  BOOST_CHECK(verifier.verifySignature(cert,
-                                       schema));
+  BOOST_CHECK(verifier.verifySignature(cert, schema));
 
   MpsVerifier loader;
   BOOST_CHECK_NO_THROW(loader.addCert(cert));
@@ -149,9 +148,9 @@ BOOST_AUTO_TEST_CASE(TestSignerVerifierSelfBadCert)
   MultipartySchema schema;
   schema.signers.emplace_back(signer.getSignerKeyName());
 
-  BOOST_CHECK(!verifier.verifySignature(signer.getSelfSignCert(
-          security::ValidityPeriod(time::system_clock::now() - time::days(100), time::system_clock::now() - time::seconds(1))),
-                           schema));
+  BOOST_CHECK(!verifier.verifySignature(signer.getSelfSignCert(security::ValidityPeriod(time::system_clock::now() - time::days(100),
+                                                                                        time::system_clock::now() - time::seconds(1))),
+                                        schema));
 }
 
 BOOST_AUTO_TEST_CASE(TestSignerVerifierSelfBadCert2)
@@ -166,17 +165,17 @@ BOOST_AUTO_TEST_CASE(TestSignerVerifierSelfBadCert2)
   schema.signers.emplace_back(signer.getSignerKeyName());
 
   auto cert = signer.getSelfSignCert(
-          security::ValidityPeriod(time::system_clock::now() - time::seconds(1), time::system_clock::now() + time::days(100)));
+      security::ValidityPeriod(time::system_clock::now() - time::seconds(1),
+                               time::system_clock::now() + time::days(100)));
   auto newBuffer = make_shared<Buffer>(cert.getContent().value(), cert.getContent().value_size() - 1);
   cert.setContent(newBuffer);
 
   BOOST_CHECK(!verifier.verifySignature(cert,
-                                       schema));
+                                        schema));
 
   MpsVerifier loader;
   BOOST_CHECK_THROW(loader.addCert(cert), std::runtime_error);
 }
-
 
 BOOST_AUTO_TEST_CASE(TestAggregateSignVerify)
 {
@@ -193,14 +192,14 @@ BOOST_AUTO_TEST_CASE(TestAggregateSignVerify)
 
   Data data1;
   data1.setName(Name("/a/b/c/d"));
-  data1.setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1.setContent(Name("/1/2/3/4").wireEncode());
 
   MultipartySchema schema;
   schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
   schema.signers.emplace_back(WildCardName(signer2.getSignerKeyName()));
 
   //add signer list
-  SignatureInfo info(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls), KeyLocator("/some/signer/list"));
+  SignatureInfo info(static_cast<ndn::tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls), KeyLocator("/some/signer/list"));
   data1.setSignatureInfo(info);
   MpsSignerList list;
   list.emplace_back(signer.getSignerKeyName());
@@ -244,18 +243,18 @@ BOOST_AUTO_TEST_CASE(TestAggregateSignVerifyBadKey)
 
   Data data1;
   data1.setName(Name("/a/b/c/d"));
-  data1.setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1.setContent(Name("/1/2/3/4").wireEncode());
 
   MultipartySchema schema;
   schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
   schema.signers.emplace_back(WildCardName(signer2.getSignerKeyName()));
 
   //add signer list
-  SignatureInfo info(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls), KeyLocator("/some/signer/list"));
+  SignatureInfo info(static_cast<ndn::tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls), KeyLocator("/some/signer/list"));
   data1.setSignatureInfo(info);
   MpsSignerList list;
   list.emplace_back(signer.getSignerKeyName());
-  list.emplace_back(signer.getSignerKeyName()); //wrong!
+  list.emplace_back(signer.getSignerKeyName());  //wrong!
   verifier.addSignerList("/some/signer/list", list);
 
   //sign
@@ -295,14 +294,14 @@ BOOST_AUTO_TEST_CASE(TestAggregateSignVerifyBadSig)
 
   Data data1;
   data1.setName(Name("/a/b/c/d"));
-  data1.setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1.setContent(Name("/1/2/3/4").wireEncode());
 
   MultipartySchema schema;
   schema.signers.emplace_back(WildCardName(signer.getSignerKeyName()));
   schema.signers.emplace_back(WildCardName(signer2.getSignerKeyName()));
 
   //add signer list
-  SignatureInfo info(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls), KeyLocator("/some/signer/list"));
+  SignatureInfo info(static_cast<ndn::tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls), KeyLocator("/some/signer/list"));
   data1.setSignatureInfo(info);
   MpsSignerList list;
   list.emplace_back(signer.getSignerKeyName());
@@ -313,7 +312,7 @@ BOOST_AUTO_TEST_CASE(TestAggregateSignVerifyBadSig)
   auto sig1 = signer.getSignature(data1);
   BOOST_ASSERT(verifier.verifySignaturePiece(data1, signer.getSignerKeyName(), sig1));
   auto sig2 = signer2.getSignature(data1);
-  data1.setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4/5")));
+  data1.setContent(Name("/1/2/3/4/5").wireEncode());
   BOOST_ASSERT(!verifier.verifySignaturePiece(data1, signer2.getSignerKeyName(), sig2));
 
   MpsAggregator aggregater;
@@ -334,6 +333,6 @@ BOOST_AUTO_TEST_CASE(TestAggregateSignVerifyBadSig)
 
 BOOST_AUTO_TEST_SUITE_END()  // TestCryptoPlayers
 
-} // namespace tests
-} // namespace ndnmps
-} // namespace ndn
+}  // namespace tests
+}  // namespace mps
+}  // namespace ndn

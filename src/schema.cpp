@@ -7,6 +7,7 @@
 #include <utility>
 
 namespace ndn {
+namespace mps {
 
 typedef boost::property_tree::ptree SchemaSection;
 
@@ -202,4 +203,5 @@ MultipartySchema::getMinSigners(const std::vector<Name>& availableKeys) const
   return resultSet;
 }
 
+}  // namespace mps
 }  // namespace ndn

@@ -26,7 +26,7 @@
 #include <boost/asio/io_service.hpp>
 
 namespace ndn {
-namespace ndnmps {
+namespace mps {
 namespace tests {
 
 /** \brief a test fixture that overrides steady clock and system clock

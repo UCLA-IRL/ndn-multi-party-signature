@@ -3,7 +3,7 @@
 #include <ndn-cxx/util/dummy-client-face.hpp>
 
 namespace ndn {
-namespace ndnmps {
+namespace mps {
 namespace tests {
 
 BOOST_FIXTURE_TEST_SUITE(TestPlayers, IdentityManagementTimeFixture)
@@ -32,7 +32,7 @@ BOOST_AUTO_TEST_CASE(VerifierFetch)
   //data to test
   auto data1 = make_shared<Data>();
   data1->setName(Name("/a/b/c/d"));
-  data1->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1->setContent(Name("/1/2/3/4").wireEncode());
 
   MultipartySchema schema;
   schema.signers.emplace_back(WildCardName(mpsSigner.getSignerKeyName()));
@@ -77,18 +77,18 @@ BOOST_AUTO_TEST_CASE(VerifierFetch2)
   dataF.setName(Name("/some/signer/list"));
   std::vector<Name> signers;
   signers.push_back(mpsSigner.getSignerKeyName());
-  dataF.setContent(makeNestedBlock(tlv::Content, MpsSignerList(signers)));
+  dataF.setContent(MpsSignerList(signers).wireEncode());
   dataF.setFreshnessPeriod(time::seconds(1));
   m_keyChain.sign(dataF, signingWithSha256());
 
   //data to test
   auto data1 = make_shared<Data>();
   data1->setName(Name("/a/b/c/d"));
-  data1->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1->setContent(Name("/1/2/3/4").wireEncode());
 
   MultipartySchema schema;
   schema.signers.emplace_back(WildCardName(mpsSigner.getSignerKeyName()));
-  mpsSigner.sign(*data1, SignatureInfo(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls), KeyLocator(dataF.getName())));
+  mpsSigner.sign(*data1, SignatureInfo(static_cast<ndn::tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls), KeyLocator(dataF.getName())));
 
   bool received = false;
   face.onSendInterest.connect([&](const Interest& interest){
@@ -125,7 +125,7 @@ BOOST_AUTO_TEST_CASE(VerifierFetchTimeout)
   //data to test
   auto data1 = make_shared<Data>();
   data1->setName(Name("/a/b/c/d"));
-  data1->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1->setContent(Name("/1/2/3/4").wireEncode());
 
   MultipartySchema schema;
   schema.signers.emplace_back(WildCardName(mpsSigner.getSignerKeyName()));
@@ -168,14 +168,14 @@ BOOST_AUTO_TEST_CASE(VerifierListFetch)
 
   shared_ptr<Data> data1 = make_shared<Data>();
   data1->setName(Name("/a/b/c/d"));
-  data1->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1->setContent(Name("/1/2/3/4").wireEncode());
 
   MultipartySchema schema;
   schema.signers.emplace_back(WildCardName(mpsSigner.getSignerKeyName()));
   schema.signers.emplace_back(WildCardName(mpsSigner2.getSignerKeyName()));
 
   //add signer list
-  SignatureInfo info(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls), KeyLocator("/some/signer/list"));
+  SignatureInfo info(static_cast<ndn::tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls), KeyLocator("/some/signer/list"));
   data1->setSignatureInfo(info);
   MpsSignerList list;
   list.emplace_back(mpsSigner.getSignerKeyName());
@@ -183,7 +183,7 @@ BOOST_AUTO_TEST_CASE(VerifierListFetch)
   Data signerList;
   signerList.setName("/some/signer/list");
   signerList.setFreshnessPeriod(time::seconds(1000));
-  signerList.setContent(makeNestedBlock(tlv::Content, list));
+  signerList.setContent(list.wireEncode());
   m_keyChain.sign(signerList, signingWithSha256());
 
   //sign
@@ -252,7 +252,7 @@ BOOST_AUTO_TEST_CASE(VerifierParallelFetch)
   //data1 to test
   auto data1 = make_shared<Data>();
   data1->setName(Name("/a/b/c/d"));
-  data1->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1->setContent(Name("/1/2/3/4").wireEncode());
 
   MultipartySchema schema;
   schema.signers.emplace_back(WildCardName(mpsSigner.getSignerKeyName()));
@@ -261,7 +261,7 @@ BOOST_AUTO_TEST_CASE(VerifierParallelFetch)
 
   auto data2 = make_shared<Data>();
   data2->setName(Name("/a/b/c/d/2"));
-  data2->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data2->setContent(Name("/1/2/3/4").wireEncode());
 
   mpsSigner.sign(*data2, "/a/b/NotExist/KEY/1234");
 
@@ -313,9 +313,9 @@ BOOST_AUTO_TEST_CASE(SignerFetch)
   //data to test
   Data data1;
   data1.setName(Name("/a/b/c/d"));
-  data1.setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1.setContent(Name("/1/2/3/4").wireEncode());
   data1.setFreshnessPeriod(time::seconds(1000));
-  data1.setSignatureInfo(SignatureInfo(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
+  data1.setSignatureInfo(SignatureInfo(static_cast<ndn::tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
                                        KeyLocator(signer.m_signer->getSignerKeyName())));
   data1.setSignatureValue(make_shared<Buffer>());
   BOOST_CHECK_NO_THROW(data1.wireEncode());
@@ -323,7 +323,7 @@ BOOST_AUTO_TEST_CASE(SignerFetch)
   //wrapper
   Data wrapper;
   wrapper.setName("/some/mps/wrapper/1234");
-  wrapper.setContent(makeNestedBlock(tlv::Content, data1));
+  wrapper.setContent(data1.wireEncode());
   wrapper.setFreshnessPeriod(time::seconds(1000));
   m_keyChain.sign(wrapper, signingWithSha256());
   BOOST_CHECK_NO_THROW(Data(wrapper.getContent().blockFromValue()));
@@ -331,7 +331,7 @@ BOOST_AUTO_TEST_CASE(SignerFetch)
   //initiation interest
   Interest signInterest;
   signInterest.setName(Name("/signer/mps/sign"));
-  Block appParam(tlv::ApplicationParameters);
+  Block appParam(ndn::tlv::ApplicationParameters);
   appParam.push_back(makeNestedBlock(tlv::UnsignedWrapperName, wrapper.getFullName()));
   signInterest.setApplicationParameters(appParam);
   signInterest.setCanBePrefix(false);
@@ -376,7 +376,7 @@ BOOST_AUTO_TEST_CASE(SignerFetch)
         const auto& content = data.getContent();
         content.parse();
         BOOST_CHECK_EQUAL(readString(content.get(tlv::Status)), std::to_string(static_cast<int>(ReplyCode::OK)));
-        const auto& v = content.get(tlv::SignatureValue);
+        const auto& v = content.get(ndn::tlv::SignatureValue);
         auto vbuff = make_shared<Buffer>(v.value(), v.value_size());
         data1.setSignatureValue(vbuff);
         MpsVerifier verifier;
@@ -420,14 +420,14 @@ BOOST_AUTO_TEST_CASE(SignerFetchTimeout)
   //wrapper
   Data wrapper;
   wrapper.setName("/some/mps/wrapper/1234");
-  wrapper.setContent(makeEmptyBlock(tlv::Content));
+  wrapper.setContent(makeEmptyBlock(ndn::tlv::Content));
   wrapper.setFreshnessPeriod(time::seconds(1000));
   m_keyChain.sign(wrapper, signingWithSha256());
 
   //initiation interest
   Interest signInterest;
   signInterest.setName(Name("/signer/mps/sign"));
-  Block appParam(tlv::ApplicationParameters);
+  Block appParam(ndn::tlv::ApplicationParameters);
   appParam.push_back(makeNestedBlock(tlv::UnsignedWrapperName, wrapper.getFullName()));
   signInterest.setApplicationParameters(appParam);
   signInterest.setCanBePrefix(false);
@@ -507,7 +507,7 @@ BOOST_AUTO_TEST_CASE(SignerFetchNotFound)
   //initiation interest
   Interest signInterest;
   signInterest.setName(Name("/signer/mps/sign"));
-  Block appParam(tlv::ApplicationParameters);
+  Block appParam(ndn::tlv::ApplicationParameters);
   appParam.push_back(makeEmptyBlock(tlv::UnsignedWrapperName));
   signInterest.setApplicationParameters(appParam);
   signInterest.setCanBePrefix(false);
@@ -557,9 +557,9 @@ BOOST_AUTO_TEST_CASE(SignerFetchBadInit)
   //data to test
   Data data1;
   data1.setName(Name("/a/b/c/d"));
-  data1.setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1.setContent(Name("/1/2/3/4").wireEncode());
   data1.setFreshnessPeriod(time::seconds(1000));
-  data1.setSignatureInfo(SignatureInfo(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
+  data1.setSignatureInfo(SignatureInfo(static_cast<ndn::tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
                                        KeyLocator(signer.m_signer->getSignerKeyName())));
   data1.setSignatureValue(make_shared<Buffer>());
   BOOST_CHECK_NO_THROW(data1.wireEncode());
@@ -567,7 +567,7 @@ BOOST_AUTO_TEST_CASE(SignerFetchBadInit)
   //wrapper
   Data wrapper;
   wrapper.setName("/some/mps/wrapper/1234");
-  wrapper.setContent(makeNestedBlock(tlv::Content, data1));
+  wrapper.setContent(data1.wireEncode());
   wrapper.setFreshnessPeriod(time::seconds(1000));
   m_keyChain.sign(wrapper, signingWithSha256());
   BOOST_CHECK_NO_THROW(Data(wrapper.getContent().blockFromValue()));
@@ -575,7 +575,7 @@ BOOST_AUTO_TEST_CASE(SignerFetchBadInit)
   //initiation interest
   Interest signInterest;
   signInterest.setName(Name("/signer/mps/sign"));
-  Block appParam(tlv::ApplicationParameters);
+  Block appParam(ndn::tlv::ApplicationParameters);
   appParam.push_back(makeNestedBlock(tlv::UnsignedWrapperName, wrapper.getName()));
   signInterest.setApplicationParameters(appParam);
   signInterest.setCanBePrefix(false);
@@ -616,14 +616,14 @@ BOOST_AUTO_TEST_CASE(SignerFetchBadWrapper)
   //wrapper
   Data wrapper;
   wrapper.setName("/some/mps/wrapper/1234");
-  wrapper.setContent(makeEmptyBlock(tlv::Content));
+  wrapper.setContent(makeEmptyBlock(ndn::tlv::Content));
   wrapper.setFreshnessPeriod(time::seconds(1000));
   m_keyChain.sign(wrapper, signingWithSha256());
 
   //initiation interest
   Interest signInterest;
   signInterest.setName(Name("/signer/mps/sign"));
-  Block appParam(tlv::ApplicationParameters);
+  Block appParam(ndn::tlv::ApplicationParameters);
   appParam.push_back(makeNestedBlock(tlv::UnsignedWrapperName, wrapper.getFullName()));
   signInterest.setApplicationParameters(appParam);
   signInterest.setCanBePrefix(false);
@@ -713,7 +713,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTest)
   //data to test
   auto data1 = make_shared<Data>();
   data1->setName(Name("/a/b/c/d"));
-  data1->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1->setContent(Name("/1/2/3/4").wireEncode());
   data1->setFreshnessPeriod(time::seconds(1000));
 
   MultipartySchema schema;
@@ -770,7 +770,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTest)
       const auto &content = data.getContent();
       content.parse();
       BOOST_CHECK(content.get(tlv::Status).isValid());
-      BOOST_CHECK(content.get(tlv::SignatureValue).isValid());
+      BOOST_CHECK(content.get(ndn::tlv::SignatureValue).isValid());
       BOOST_CHECK_EQUAL(readString(content.get(tlv::Status)), std::to_string(static_cast<int>(ReplyCode::OK)));
       resultReplied = true;
     } else {
@@ -785,8 +785,8 @@ BOOST_AUTO_TEST_CASE(InitiatorTest)
     if (Name("/initiator/mps/wrapper").isPrefixOf(data.getName())) {
       const auto &content = data.getContent();
       content.parse();
-      BOOST_CHECK(content.get(tlv::Data).isValid());
-      BOOST_CHECK_EQUAL(content.get(tlv::Data), data1->wireEncode());
+      BOOST_CHECK(content.get(ndn::tlv::Data).isValid());
+      BOOST_CHECK_EQUAL(content.get(ndn::tlv::Data), data1->wireEncode());
     } else {
       std::cout << "data: " << data.getName() << std::endl;
       BOOST_CHECK(false);
@@ -834,7 +834,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTestTimeout)
   //data to test
   auto data1 = make_shared<Data>();
   data1->setName(Name("/a/b/c/d"));
-  data1->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1->setContent(Name("/1/2/3/4").wireEncode());
   data1->setFreshnessPeriod(time::seconds(1000));
 
   MultipartySchema schema;
@@ -895,7 +895,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTestUnauthorized)
   //data to test
   auto data1 = make_shared<Data>();
   data1->setName(Name("/a/b/c/d"));
-  data1->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1->setContent(Name("/1/2/3/4").wireEncode());
   data1->setFreshnessPeriod(time::seconds(1000));
 
   MultipartySchema schema;
@@ -968,7 +968,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTestDataVerifyFail)
   //data to test
   auto data1 = make_shared<Data>();
   data1->setName(Name("/a/b/c/d"));
-  data1->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1->setContent(Name("/1/2/3/4").wireEncode());
   data1->setFreshnessPeriod(time::seconds(1000));
 
   MultipartySchema schema;
@@ -1039,8 +1039,8 @@ BOOST_AUTO_TEST_CASE(InitiatorTestDataVerifyFail)
     if (Name("/initiator/mps/wrapper").isPrefixOf(data.getName())) {
       const auto &content = data.getContent();
       content.parse();
-      BOOST_CHECK(content.get(tlv::Data).isValid());
-      BOOST_CHECK_EQUAL(content.get(tlv::Data), data1->wireEncode());
+      BOOST_CHECK(content.get(ndn::tlv::Data).isValid());
+      BOOST_CHECK_EQUAL(content.get(ndn::tlv::Data), data1->wireEncode());
     } else {
       std::cout << "data: " << data.getName() << std::endl;
       BOOST_CHECK(false);
@@ -1084,7 +1084,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTestBadSignature)
   //data to test
   auto data1 = make_shared<Data>();
   data1->setName(Name("/a/b/c/d"));
-  data1->setContent(makeNestedBlock(tlv::Content, Name("/1/2/3/4")));
+  data1->setContent(Name("/1/2/3/4").wireEncode());
   data1->setFreshnessPeriod(time::seconds(1000));
 
   MultipartySchema schema;
@@ -1141,7 +1141,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTestBadSignature)
       const auto &content = data.getContent();
       content.parse();
       BOOST_CHECK(content.get(tlv::Status).isValid());
-      BOOST_CHECK(content.get(tlv::SignatureValue).isValid());
+      BOOST_CHECK(content.get(ndn::tlv::SignatureValue).isValid());
       BOOST_CHECK_EQUAL(readString(content.get(tlv::Status)), std::to_string(static_cast<int>(ReplyCode::OK)));
       resultReplied = true;
     } else {
@@ -1156,8 +1156,8 @@ BOOST_AUTO_TEST_CASE(InitiatorTestBadSignature)
     if (Name("/initiator/mps/wrapper").isPrefixOf(data.getName())) {
       const auto &content = data.getContent();
       content.parse();
-      BOOST_CHECK(content.get(tlv::Data).isValid());
-      BOOST_CHECK_EQUAL(content.get(tlv::Data), data1->wireEncode());
+      BOOST_CHECK(content.get(ndn::tlv::Data).isValid());
+      BOOST_CHECK_EQUAL(content.get(ndn::tlv::Data), data1->wireEncode());
     } else {
       std::cout << "data: " << data.getName() << std::endl;
       BOOST_CHECK(false);
@@ -1186,7 +1186,7 @@ BOOST_AUTO_TEST_CASE(InitiatorTestBadSignature)
 BOOST_AUTO_TEST_SUITE_END()  // TestMpsSignerList
 
 } // namespace tests
-} // namespace ndnmps
+} // namespace mps
 } // namespace ndn
 
 

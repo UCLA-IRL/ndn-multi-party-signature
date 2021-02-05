@@ -6,6 +6,7 @@
 #include <ndn-cxx/util/random.hpp>
 
 namespace ndn {
+namespace mps {
 
 static bool BLS_INITIALIZED = false;
 
@@ -15,8 +16,7 @@ bls_library_init()
   if (!BLS_INITIALIZED) {
     int err = blsInit(MCL_BLS12_381, MCLBN_COMPILED_TIME_VAR);
     if (err != 0) {
-      printf("blsInit err %d\n", err);
-      exit(1);
+      NDN_THROW(std::runtime_error("Fail to call blsInit, error code: " + std::to_string(err)));
     }
     else {
       BLS_INITIALIZED = true;
@@ -101,13 +101,13 @@ MpsSigner::getSignature(const Data& data) const
     NDN_THROW(std::runtime_error("Error on serializing signature"));
   }
   signatureBuf->resize(written_size);
-  return Block(tlv::SignatureValue, signatureBuf);
+  return Block(ndn::tlv::SignatureValue, signatureBuf);
 }
 
 void
 MpsSigner::sign(Data& data, const Name& keyLocatorName) const
 {
-  SignatureInfo info(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
+  SignatureInfo info(static_cast<ndn::tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
                      keyLocatorName.empty()? m_signerName : keyLocatorName);
   sign(data, info);
 }
@@ -115,7 +115,7 @@ MpsSigner::sign(Data& data, const Name& keyLocatorName) const
 void
 MpsSigner::sign(Interest& interest, const Name& keyLocatorName) const
 {
-  SignatureInfo info(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
+  SignatureInfo info(static_cast<ndn::tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
                      keyLocatorName.empty()? m_signerName : keyLocatorName);
 
   sign(interest, info);
@@ -175,9 +175,10 @@ MpsSigner::getSelfSignCert(const security::ValidityPeriod& period) const
   certName.append("self-sign").append(std::to_string(random::generateSecureWord64()));
   newCert.setName(certName);
   auto pubKey = getpublicKeyStr();
-  newCert.setContentType(tlv::ContentType_Key);
+  newCert.setContentType(ndn::tlv::ContentType_Key);
   newCert.setContent(pubKey.data(), pubKey.size());
-  SignatureInfo signatureInfo(static_cast<tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls), KeyLocator(m_signerName));
+  SignatureInfo signatureInfo(static_cast<ndn::tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
+                              KeyLocator(m_signerName));
   signatureInfo.setValidityPeriod(period);
 
   sign(newCert, signatureInfo);
@@ -243,7 +244,7 @@ bool
 MpsVerifier::readyToVerify(const Data& data) const
 {
   const auto& sigInfo = data.getSignatureInfo();
-  if (sigInfo.hasKeyLocator() && sigInfo.getKeyLocator().getType() == tlv::Name) {
+  if (sigInfo.hasKeyLocator() && sigInfo.getKeyLocator().getType() == ndn::tlv::Name) {
     if (m_certs.count(sigInfo.getKeyLocator().getName()) == 1)
       return true;
     if (m_signLists.count(sigInfo.getKeyLocator().getName()) == 0)
@@ -265,7 +266,7 @@ MpsVerifier::itemsToFetch(const Data& data) const
 {
   std::vector<Name> ans;
   const auto& sigInfo = data.getSignatureInfo();
-  if (sigInfo.hasKeyLocator() && sigInfo.getKeyLocator().getType() == tlv::Name) {
+  if (sigInfo.hasKeyLocator() && sigInfo.getKeyLocator().getType() == ndn::tlv::Name) {
     if (m_certs.count(sigInfo.getKeyLocator().getName()) == 1)
       return ans;
     if (m_signLists.count(sigInfo.getKeyLocator().getName()) == 0) {
@@ -286,13 +287,13 @@ bool
 MpsVerifier::verifySignature(const Data& data, const MultipartySchema& schema) const
 {
   const auto& sigInfo = data.getSignatureInfo();
-  if (sigInfo.getCustomTlv(tlv::ValidityPeriod) && !sigInfo.getValidityPeriod().isValid()) {
+  if (sigInfo.getCustomTlv(ndn::tlv::ValidityPeriod) && !sigInfo.getValidityPeriod().isValid()) {
     return false;
   }
   MpsSignerList locator;
   bool aggKeyInitialized = false;
   blsPublicKey aggKey;
-  if (sigInfo.getKeyLocator().getType() == tlv::Name) {
+  if (sigInfo.getKeyLocator().getType() == ndn::tlv::Name) {
     if (m_signLists.count(sigInfo.getKeyLocator().getName()) != 0) {
       locator = m_signLists.at(sigInfo.getKeyLocator().getName());
       if (m_aggregateKey.count(sigInfo.getKeyLocator().getName()) != 0) {
@@ -355,10 +356,10 @@ MpsVerifier::verifySignature(const Data& data, const MultipartySchema& schema) c
 bool
 MpsVerifier::verifySignature(const Interest& interest) const {
   const auto &sigInfo = interest.getSignatureInfo();
-  if (!sigInfo || (sigInfo->getCustomTlv(tlv::ValidityPeriod) && !sigInfo->getValidityPeriod().isValid())) {
+  if (!sigInfo || (sigInfo->getCustomTlv(ndn::tlv::ValidityPeriod) && !sigInfo->getValidityPeriod().isValid())) {
     return false;
   }
-  if (sigInfo->getKeyLocator().getType() != tlv::Name ||
+  if (sigInfo->getKeyLocator().getType() != ndn::tlv::Name ||
       m_certs.count(sigInfo->getKeyLocator().getName()) == 0) {
     return false;
   }
@@ -400,7 +401,7 @@ bool
 MpsVerifier::verifySignaturePiece(const Data& dataWithInfo, const Name& signedBy, const Block& signaturePiece) const
 {
   const auto& sigInfo = dataWithInfo.getSignatureInfo();
-  if (sigInfo.getCustomTlv(tlv::ValidityPeriod) && !sigInfo.getValidityPeriod().isValid()) {
+  if (sigInfo.getCustomTlv(ndn::tlv::ValidityPeriod) && !sigInfo.getValidityPeriod().isValid()) {
     return false;
   }
   if (!sigInfo || sigInfo.getSignatureType() != tlv::SignatureSha256WithBls) {
@@ -473,4 +474,5 @@ MpsAggregator::buildMultiSignature(Data& dataWithInfo, const std::vector<blsSign
   dataWithInfo.wireEncode();
 }
 
+}  // namespace mps
 }  // namespace ndn

@@ -14,7 +14,7 @@
 #include <stdlib.h>
 
 namespace ndn {
-namespace ndnmps {
+namespace mps {
 namespace tests {
 
 class GlobalConfiguration
@@ -55,5 +55,5 @@ BOOST_GLOBAL_FIXTURE(GlobalConfiguration)
 #endif
 
 } // namespace tests
-} // namespace ndnmps
+} // namespace mps
 } // namespace ndn

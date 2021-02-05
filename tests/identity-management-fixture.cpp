@@ -14,7 +14,7 @@
 #include <boost/filesystem.hpp>
 
 namespace ndn {
-namespace ndnmps {
+namespace mps {
 namespace tests {
 
 namespace v2 = security::v2;
@@ -116,5 +116,5 @@ IdentityManagementFixture::addCertificate(const security::Key& key, const std::s
 }
 
 } // namespace tests
-} // namespace ndnmps
+} // namespace mps
 } // namespace ndn

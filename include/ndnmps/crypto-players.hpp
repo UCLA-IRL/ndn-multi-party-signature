@@ -13,6 +13,7 @@
 #include "ndnmps/schema.hpp"
 
 namespace ndn {
+namespace mps {
 
 /**
  * The signer class for maintaining secret/public key pair, sign and encode data packet.
@@ -295,6 +296,7 @@ public:
   buildMultiSignature(Data& dataWithInfo, const std::vector<blsSignature>& collectedPiece) const;
 };
 
+}  // namespace mps
 }  // namespace ndn
 
 #endif  // NDNMPS_CRYPTO_PLAYERS_HPP

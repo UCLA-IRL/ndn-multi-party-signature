@@ -1,7 +1,3 @@
-//
-// Created by Tyler on 12/29/20.
-//
-
 #ifndef NDNMPS_MPS_SIGNER_LIST_HPP
 #define NDNMPS_MPS_SIGNER_LIST_HPP
 
@@ -11,6 +7,7 @@
 #include "ndnmps/common.hpp"
 
 namespace ndn {
+namespace mps {
 
 class MpsSignerList: public std::vector<Name> {
 
@@ -79,6 +76,7 @@ public:
 std::ostream&
 operator<<(std::ostream& os, const MpsSignerList& signerList);
 
+}  // namespace mps
 }  // namespace ndn
 
 #endif  //NDNMPS_MPS_SIGNER_LIST_HPP

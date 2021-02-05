@@ -12,6 +12,7 @@
 #include "ndnmps/schema.hpp"
 
 namespace ndn {
+namespace mps {
 
 /**
  * The signer class class that handles functionality in the multi-signing protocol.
@@ -270,6 +271,7 @@ private:
   keyLossTimeout(uint32_t id, const Name& keyName);
 };
 
+}  // namespace mps
 }  // namespace ndn
 
 #endif  // NDNMPS_PLAYERS_HPP

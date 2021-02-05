@@ -2,7 +2,7 @@
 #include "test-common.hpp"
 
 namespace ndn {
-namespace ndnmps {
+namespace mps {
 namespace tests {
 
 BOOST_AUTO_TEST_SUITE(TestSchema)
@@ -195,5 +195,5 @@ BOOST_AUTO_TEST_CASE(SchemaMinSignerMultipleMatchPosition)
 BOOST_AUTO_TEST_SUITE_END()  // TestSchema
 
 } // namespace tests
-} // namespace ndnmps
+} // namespace mps
 } // namespace ndn

@@ -17,7 +17,7 @@
 #include <vector>
 
 namespace ndn {
-namespace ndnmps {
+namespace mps {
 namespace tests {
 
 class IdentityManagementBaseFixture
@@ -90,7 +90,7 @@ class IdentityManagementTimeFixture : public UnitTestTimeFixture
 };
 
 } // namespace tests
-} // namespace ndnmps
+} // namespace mps
 } // namespace ndn
 
 #endif // NDN_TESTS_IDENTITY_MANAGEMENT_FIXTURE_HPP
