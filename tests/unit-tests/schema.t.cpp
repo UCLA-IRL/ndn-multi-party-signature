@@ -194,6 +194,6 @@ BOOST_AUTO_TEST_CASE(SchemaMinSignerMultipleMatchPosition)
 
 BOOST_AUTO_TEST_SUITE_END()  // TestSchema
 
-} // namespace tests
-} // namespace mps
-} // namespace ndn
+}  // namespace tests
+}  // namespace mps
+}  // namespace ndn
