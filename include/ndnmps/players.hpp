@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <map>
+#include <tuple>
 #include <ndn-cxx/data.hpp>
 #include <ndn-cxx/face.hpp>
 #include <ndn-cxx/util/scheduler.hpp>
@@ -26,14 +27,14 @@ private:
   function<bool(const Interest&)> m_interestVerifyCallback;
   std::list<RegisteredPrefixHandle> m_handles;
 
-  struct RequestInfo {
-    ReplyCode status;
-    uint64_t versionCount;
-    optional<Block> value;
-    RequestInfo();
+  // Key: RequestID, Code, SignatureBlock, version
+  struct RequestInstance {
+    // ECDH State: AES Key, HMAC Key
+    ReplyCode code;
+    Block signatureValue;
+    size_t version;
   };
-  std::map<Buffer, RequestInfo> m_states;
-  std::map<Name, Buffer> m_unsignedNames;
+  std::map<uint64_t, RequestInstance> m_results;
 
 public:
   std::unique_ptr<MpsSigner> m_signer;
@@ -50,7 +51,7 @@ public:
   /**
    * the destructor. Currently remove the prefix registration.
    */
-  virtual ~Signer();
+  ~Signer();
 
   /**
    * Set the behavior when verifying the unsigned data.
@@ -69,28 +70,13 @@ public:
 
 private:
   void
-  onInvocation(const Interest&);
+  onSignRequest(const Interest&);
 
   void
-  onResult(const Interest&);
+  onResultFetch(const Interest&);
 
-  void
-  reply(const Name& interestName, ConstBufferPtr requestId) const;
-
-  void
-  replyError(const Name& interestName, ReplyCode errorCode) const;
-
-  static void
-  onRegisterFail(const Name& prefix, const std::string& reason);
-
-  void
-  onData(const Interest&, const Data& data);
-
-  void
-  onNack(const Interest&, const lp::Nack& nack);
-
-  void
-  onTimeout(const Interest&);
+  Data
+  generateAck(const Name& interestName, ReplyCode code, uint64_t requestId) const;
 };
 
 typedef function<void(bool)> VerifyFinishCallback;

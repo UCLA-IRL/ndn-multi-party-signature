@@ -13,6 +13,12 @@ NDN_LOG_INIT(ndnmps.players);
 const time::milliseconds TIMEOUT = time::seconds(4);
 const time::milliseconds ESTIMATE_PROCESS_TIME = time::seconds(1);
 
+void
+onRegisterFail(const Name& prefix, const std::string& reason)
+{
+  NDN_LOG_ERROR("Fail to register prefix " << prefix.toUri() << " because " << reason);
+}
+
 Signer::Signer(std::unique_ptr<MpsSigner> mpsSigner, const Name& prefix, Face& face)
     : m_signer(std::move(mpsSigner))
     , m_prefix(prefix)
@@ -21,14 +27,12 @@ Signer::Signer(std::unique_ptr<MpsSigner> mpsSigner, const Name& prefix, Face& f
   Name invocationPrefix = m_prefix;
   invocationPrefix.append("mps").append("sign");
   m_handles.push_back(m_face.setInterestFilter(
-      invocationPrefix, std::bind(&Signer::onInvocation, this, _2), nullptr,
-      Signer::onRegisterFail));
+      invocationPrefix, std::bind(&Signer::onSignRequest, this, _2), nullptr, onRegisterFail));
 
   Name resultPrefix = m_prefix;
-  resultPrefix.append("mps").append("result-of");
+  resultPrefix.append("mps").append("result");
   m_handles.push_back(m_face.setInterestFilter(
-      resultPrefix, std::bind(&Signer::onResult, this, _2), nullptr,
-      Signer::onRegisterFail));
+      resultPrefix, std::bind(&Signer::onResultFetch, this, _2), nullptr, onRegisterFail));
 }
 
 Signer::~Signer()
@@ -50,26 +54,20 @@ Signer::setSignatureVerifyCallback(const function<bool(const Interest&)>& func)
   m_interestVerifyCallback = func;
 }
 
-Signer::RequestInfo::RequestInfo()
-    : status(ReplyCode::Processing)
-    , versionCount(0)
-    , value(nullopt) {}
-
 void
-Signer::onInvocation(const Interest& interest)
+Signer::onSignRequest(const Interest& interest)
 {
-  RequestInfo info;
   if (!m_interestVerifyCallback || !m_interestVerifyCallback(interest)) {
-    replyError(interest.getName(), ReplyCode::Unauthorized);
+    m_face.put(generateAck(interest.getName(), ReplyCode::Unauthorized, 0));
     return;
   }
-  //parse
-  const auto& b = interest.getApplicationParameters();
-  b.parse();
+  // parse
+  const auto& paramBlock = interest.getApplicationParameters();
+  paramBlock.parse();
   Name wrapperName;
   try {
-    if (b.elements_size() == 1 && b.get(tlv::UnsignedWrapperName).isValid()) {
-      wrapperName = Name(b.get(tlv::UnsignedWrapperName).blockFromValue());
+    if (paramBlock.get(tlv::UnsignedWrapperName).isValid()) {
+      wrapperName.wireDecode(paramBlock.get(tlv::UnsignedWrapperName).blockFromValue());
       if (!wrapperName.at(-1).isImplicitSha256Digest()) {
         NDN_THROW(std::runtime_error("digest not found for data"));
       }
@@ -77,216 +75,121 @@ Signer::onInvocation(const Interest& interest)
     else {
       NDN_THROW(std::runtime_error("Block Element not found or Bad element type in signer's request"));
     }
+    if (!interest.getName().get(m_prefix.size() + 2).isParametersSha256Digest()) {
+      NDN_THROW(std::runtime_error("interest not end with parameter digest."));
+    }
   }
   catch (const std::exception& e) {
     NDN_LOG_ERROR("Got error in decoding invocation request: " << e.what());
-    replyError(interest.getName(), ReplyCode::BadRequest);
+    m_face.put(generateAck(interest.getName(), ReplyCode::BadRequest, 0));
     return;
   }
 
-  //add
-  if (!interest.getName().get(m_prefix.size() + 2).isParametersSha256Digest()) {
-    NDN_LOG_ERROR("interest not end with parameter SHA digest: " << interest.getName());
-    return;
-  }
-  auto id = make_shared<const Buffer>(interest.getName().get(m_prefix.size() + 2).value(),
-                                      interest.getName().get(m_prefix.size() + 2).value_size());
-  while (m_states.count(*id)) {
-    Buffer newBuffer(32);
-    random::generateSecureBytes(newBuffer.data(), 32);
-    id = make_shared<const Buffer>(newBuffer);
-  }
-  m_states.emplace(*id, info);
-  m_unsignedNames.emplace(wrapperName, *id);
-  reply(interest.getName(), id);
+  auto randomId = random::generateSecureWord64();
+  RequestInstance instance;
+  instance.code = ReplyCode::Processing;
+  instance.version = 0;
+  m_results.emplace(randomId, instance);
+  m_face.put(generateAck(interest.getName(), ReplyCode::Processing, randomId));
 
-  //fetch
+  // fetch parameter
   Interest fetchInterest(wrapperName);
   fetchInterest.setCanBePrefix(false);
   fetchInterest.setMustBeFresh(true);
   fetchInterest.setInterestLifetime(TIMEOUT);
   m_face.expressInterest(
       fetchInterest,
-      std::bind(&Signer::onData, this, _1, _2),
-      std::bind(&Signer::onNack, this, _1, _2),
-      std::bind(&Signer::onTimeout, this, _1));
+      [&](auto& interest, auto& data) {
+        // parse fetched data
+        ReplyCode code = ReplyCode::OK;
+        Data unsignedData;
+        try {
+          unsignedData.wireDecode(data.getContent().blockFromValue());
+        }
+        catch (const std::exception& e) {
+          NDN_LOG_ERROR("Unsigned Data decoding error");
+          code = ReplyCode::FailedDependency;
+        }
+        if (!m_dataVerifyCallback || !m_dataVerifyCallback(unsignedData)) {
+          NDN_LOG_ERROR("Unsigned Data verification error");
+          code = ReplyCode::Unauthorized;
+        }
+        // generate result
+        m_results[randomId].code = code;
+        if (code == ReplyCode::OK) {
+          m_results[randomId].signatureValue = m_signer->getSignature(unsignedData);
+        }
+      },
+      [&](auto& interest, auto&) {
+        // nack
+        m_results[randomId].code = ReplyCode::FailedDependency;
+      },
+      [&](auto& interest) {
+        // timeout
+        m_results[randomId].code = ReplyCode::FailedDependency;
+      });
 }
 
 void
-Signer::onResult(const Interest& interest)
+Signer::onResultFetch(const Interest& interest)
 {
-  //parse
-  if (interest.getName().size() < m_prefix.size() + 3 || interest.getName().size() > m_prefix.size() + 5 || !interest.getName().get(m_prefix.size() + 2).isGeneric()) {
+  // parse request
+  if (interest.getName().size() != m_prefix.size() + 3) {
     NDN_LOG_ERROR("Bad result request name format");
-    replyError(interest.getName(), ReplyCode::BadRequest);
-  }
-  else if (interest.getName().size() >= m_prefix.size() + 4 && !interest.getName().get(m_prefix.size() + 3).isVersion()) {
-    NDN_LOG_ERROR("Bad result request version");
-    replyError(interest.getName(), ReplyCode::BadRequest);
-  }
-  auto requestId = make_shared<Buffer>(interest.getName().get(m_prefix.size() + 2).value(), interest.getName().get(m_prefix.size() + 2).value_size());
-  uint64_t versionNum = interest.getName().size() < m_prefix.size() + 4 ? 0 : interest.getName().get(m_prefix.size() + 3).toVersion();
-
-  const auto& it = m_states.find(*requestId);
-  if (it != m_states.end()) {
-    if (versionNum > it->second.versionCount) {
-      NDN_LOG_ERROR("Bad version number: requested " << versionNum << " state current: " << it->second.versionCount);
-      replyError(interest.getName(), ReplyCode::BadRequest);
-      return;
-    }
-    if (it->second.status == ReplyCode::OK && !it->second.value.has_value()) {
-      it->second.status = ReplyCode::InternalError;
-    }
-
-    reply(interest.getName(), requestId);
-    it->second.versionCount++;
-    if (it != m_states.end() && it->second.status != ReplyCode::Processing) {
-      m_states.erase(it);
-    }
-  }
-  else {
-    replyError(interest.getName(), ReplyCode::NotFound);
-  }
-}
-
-void
-Signer::reply(const Name& interestName, ConstBufferPtr requestId) const
-{
-  const auto& it = m_states.find(*requestId);
-  if (it == m_states.end()) {
-    replyError(interestName, ReplyCode::NotFound);
+    // bad request let it timeout
     return;
   }
-  Data data;
-  if (readString(interestName.get(m_prefix.size() + 1)) == "result-of" && !interestName.get(m_prefix.size() + 3).isVersion()) {
-    data.setName(Name(interestName).appendVersion(it->second.versionCount));
+  auto resultId = readNonNegativeInteger(interest.getName().get(m_prefix.size() + 2));
+  auto it = m_results.find(resultId);
+  if (it == m_results.end()) {
+    // replayed or phishing request, let it timeout
+    return;
   }
-  else {
-    data.setName(interestName);
-  }
+  auto requestInstance = it->second;
 
-  Block block(ndn::tlv::Content);
-  block.push_back(makeStringBlock(tlv::Status,
-                                  std::to_string(static_cast<int>(it->second.status))));
-  if (it->second.status == ReplyCode::Processing) {
-    block.push_back(makeNonNegativeIntegerBlock(tlv::ResultAfter, ESTIMATE_PROCESS_TIME.count()));
+  // otherwise, reply
+  Data result(interest.getName());
+  Block contentBlock(ndn::tlv::Content);
+  contentBlock.push_back(makeStringBlock(tlv::Status, std::to_string(static_cast<int>(requestInstance.code))));
+  if (requestInstance.code == ReplyCode::Processing) {
+    requestInstance.version += 1;
+    it->second = requestInstance;
+    contentBlock.push_back(makeNonNegativeIntegerBlock(tlv::ResultAfter, ESTIMATE_PROCESS_TIME.count()));
     Name newResultName = m_prefix;
-    newResultName.append("mps").append("result-of").append(requestId->data(), requestId->size());
-    block.push_back(makeNestedBlock(tlv::ResultName, newResultName));
+    newResultName.append("mps").append("result").appendNumber(resultId).appendVersion(requestInstance.version);
+    contentBlock.push_back(makeNestedBlock(tlv::ResultName, newResultName));
   }
-  else if (it->second.status == ReplyCode::OK) {
-    block.push_back(*it->second.value);
-  }
-  else {
-    replyError(interestName, it->second.status);
-    return;
-  }
-  data.setContent(block);
-  data.setFreshnessPeriod(TIMEOUT);
-  m_signer->sign(data);
-  m_face.put(data);
-}
-
-void
-Signer::replyError(const Name& interestName, ReplyCode errorCode) const
-{
-  Data data;
-  if (readString(interestName.get(m_prefix.size() + 1)) == "result-of" && !interestName.get(m_prefix.size() + 3).isVersion()) {
-    data.setName(Name(interestName).appendVersion(100));
+  else if (requestInstance.code == ReplyCode::OK) {
+    m_results.erase(it);
+    contentBlock.push_back(requestInstance.signatureValue);
   }
   else {
-    data.setName(interestName);
+    m_results.erase(it);
   }
-  data.setContent(makeStringBlock(tlv::Status, std::to_string(static_cast<int>(errorCode))));
-  data.setFreshnessPeriod(TIMEOUT);
-  m_signer->sign(data);
-  m_face.put(data);
+  contentBlock.encode();
+  result.setContent(contentBlock);
+  result.setFreshnessPeriod(TIMEOUT);
+  m_signer->sign(result);
+  m_face.put(result);
 }
 
-void
-Signer::onRegisterFail(const Name& prefix, const std::string& reason)
+Data
+Signer::generateAck(const Name& interestName, ReplyCode code, uint64_t requestId) const
 {
-  NDN_LOG_ERROR("Fail to register prefix " << prefix.toUri() << " because " << reason);
-}
-
-void
-Signer::onData(const Interest& interest, const Data& data)
-{
-  ReplyCode code = ReplyCode::OK;
-
-  //check digest
-  if (interest.getName() != data.getFullName()) {
-    NDN_LOG_ERROR("Data verification failed");
-    code = ReplyCode::FailedDependency;
+  Data ack(interestName);
+  Block contentBlock(ndn::tlv::Content);
+  contentBlock.push_back(makeStringBlock(tlv::Status, std::to_string(static_cast<int>(ReplyCode::Processing))));
+  if (code == ReplyCode::Processing) {
+    contentBlock.push_back(makeNonNegativeIntegerBlock(tlv::ResultAfter, ESTIMATE_PROCESS_TIME.count()));
+    Name newResultName = m_prefix;
+    newResultName.append("mps").append("result").appendNumber(requestId);
+    contentBlock.push_back(makeNestedBlock(tlv::ResultName, newResultName));
   }
-
-  //check unsigned data
-  Data unsignedData;
-  if (code == ReplyCode::OK) {
-    try {
-      unsignedData = Data(data.getContent().blockFromValue());
-      if (!unsignedData.getSignatureInfo()) {
-        NDN_LOG_ERROR("Unsigned Data does not have encoding");
-        code = ReplyCode::FailedDependency;
-      }
-    }
-    catch (const std::exception& e) {
-      NDN_LOG_ERROR("Unsigned Data encoding fail");
-      code = ReplyCode::FailedDependency;
-    }
-  }
-
-  if (m_unsignedNames.count(interest.getName()) == 0) {
-    return;
-  }
-  const Buffer& id = m_unsignedNames.at(interest.getName());
-  if (m_states.count(id) == 0)
-    return;
-  RequestInfo& state = m_states.at(id);
-  if (code == ReplyCode::OK) {
-    if (!m_dataVerifyCallback || !m_dataVerifyCallback(data)) {
-      NDN_LOG_ERROR("Unsigned Data verification fail");
-      code = ReplyCode::Unauthorized;
-    }
-  }
-
-  state.status = code;
-  if (code != ReplyCode::OK) {
-    return;
-  }
-  //sign
-  state.value = m_signer->getSignature(unsignedData);
-
-  //cleanup
-  m_unsignedNames.erase(interest.getName());
-}
-
-void
-Signer::onNack(const Interest& interest, const lp::Nack& nack)
-{
-  NDN_LOG_ERROR("Received NACK with reason " << nack.getReason() << " for " << interest.getName());
-
-  if (m_unsignedNames.count(interest.getName()) != 0) {
-    auto id = m_unsignedNames.at(interest.getName());
-    if (m_states.count(id) != 0) {
-      m_states.at(id).status = ReplyCode::FailedDependency;
-    }
-    m_unsignedNames.erase(interest.getName());
-  }
-}
-
-void
-Signer::onTimeout(const Interest& interest)
-{
-  NDN_LOG_ERROR("Interest Timeout on " << interest.getName());
-
-  if (m_unsignedNames.count(interest.getName()) != 0) {
-    auto id = m_unsignedNames.at(interest.getName());
-    if (m_states.count(id) != 0) {
-      m_states.at(id).status = ReplyCode::FailedDependency;
-    }
-    m_unsignedNames.erase(interest.getName());
-  }
+  contentBlock.encode();
+  ack.setContent(contentBlock);
+  ack.setFreshnessPeriod(TIMEOUT);
+  m_signer->sign(ack);
+  return ack;
 }
 
 Verifier::Verifier(std::unique_ptr<MpsVerifier> verifier, Face& face, bool fetchKeys)

@@ -316,7 +316,6 @@ BOOST_AUTO_TEST_CASE(SignerFetch)
   //data to test
   Data data1;
   data1.setName(Name("/a/b/c/d"));
-  data1.setContent(Name("/1/2/3/4").wireEncode());
   data1.setFreshnessPeriod(time::seconds(1000));
   data1.setSignatureInfo(SignatureInfo(static_cast<ndn::tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
                                        KeyLocator(signer.m_signer->getSignerKeyName())));
@@ -343,10 +342,6 @@ BOOST_AUTO_TEST_CASE(SignerFetch)
 
   //result interest
   Interest resultInterest;
-  resultInterest.setName(Name("/signer/mps/result-of")
-                             .append(signInterest.getName().get(-1).value(), signInterest.getName().get(-1).value_size()));
-  resultInterest.setCanBePrefix(true);
-  resultInterest.setMustBeFresh(true);
 
   MultipartySchema schema;
   schema.signers.emplace_back(WildCardName(signer.m_signer->getSignerKeyName()));
@@ -362,15 +357,13 @@ BOOST_AUTO_TEST_CASE(SignerFetch)
   bool result1_received = false;
   bool result2_received = false;
   bool init_received = false;
+  int count = 0;
   face.onSendData.connect([&](const Data &data) {
     BOOST_CHECK(data.getFreshnessPeriod().count() > 0);
-    if (Name("/signer/mps/result-of").isPrefixOf(data.getName())) {
+    if (Name("/signer/mps/result").isPrefixOf(data.getName())) {
       //result
-      BOOST_CHECK_EQUAL(data.getName().size(), 5);
-      BOOST_CHECK(data.getName().get(3).isGeneric());
-      BOOST_CHECK_EQUAL_COLLECTIONS(data.getName().get(3).value_begin(), data.getName().get(3).value_end(),
-                                    signInterest.getName().get(-1).value_begin(), signInterest.getName().get(-1).value_end());
-      if (data.getName().get(-1).toVersion() == 0) {
+      BOOST_CHECK_EQUAL(data.getName().size(), 4);
+      if (!result1_received) {
         result1_received = true;
         const auto &content = data.getContent();
         content.parse();
@@ -396,7 +389,7 @@ BOOST_AUTO_TEST_CASE(SignerFetch)
       const auto &content = data.getContent();
       content.parse();
       BOOST_CHECK_EQUAL(readString(content.get(tlv::Status)), std::to_string(static_cast<int>(ReplyCode::Processing)));
-      BOOST_CHECK_EQUAL(Name(content.get(tlv::ResultName).blockFromValue()), resultInterest.getName());
+      resultInterest.setName(Name(content.get(tlv::ResultName).blockFromValue()));
       init_received = true;
     }
   });

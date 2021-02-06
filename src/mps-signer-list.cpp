@@ -1,4 +1,5 @@
 #include "ndnmps/mps-signer-list.hpp"
+
 #include <utility>
 
 namespace ndn {
@@ -8,8 +9,9 @@ MpsSignerList::MpsSignerList(std::vector<Name>&& signers)
     : std::vector<Name>(std::move(signers))
 {
 }
+
 MpsSignerList::MpsSignerList(const std::vector<Name>& signers)
-        : std::vector<Name>(signers)
+    : std::vector<Name>(signers)
 {
 }
 
@@ -32,7 +34,8 @@ MpsSignerList::wireEncode() const
 
 template <encoding::Tag TAG>
 size_t
-MpsSignerList::wireEncode(EncodingImpl<TAG>& encoder) const {
+MpsSignerList::wireEncode(EncodingImpl<TAG>& encoder) const
+{
   auto b = wireEncode();
   encoder.appendBlock(b);
   return b.size();

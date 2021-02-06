@@ -108,14 +108,14 @@ Specifically, for each `I` and `S`, the protocol sets:
 
 * If `S` agrees to sign the data, `S` uses its private key to sign the packet `D_Signed_S` and put the signature value into the result packet. Then, `S` publishes the result packet.
 
-  * Data Name: `/S/mps/result-of/[SignRequest.digest]/[Randomness]`
+  * Data Name: `/S/mps/result/[Randomness]/[version]`
   * Data content:
 
     * (Encrypted) `Status`, Status code: 102 Processing, 200 OK,
                 404 Not Found, 401 Unauthorized, 424 Failed Dependency,
                 500 Internal Error, 503 Unavailable,
     * (Encrypted) `Result_after`, Estimated time of finishing the signing process.
-    * (Encrypted) `Result_name`, a new future result Data packet name `D_Signed_S.Name` whose randomness is renewed.
+    * (Encrypted) `Result_name`, a new future result Data packet name `D_Signed_S.Name` whose version is renewed.
     * (Encrypted) (Only when 200 OK) Signature Value of `D_Signed_S`. Note the keylocator must be `SignRequest.KeyLocator_Name`
 
   * Signature: HAMC

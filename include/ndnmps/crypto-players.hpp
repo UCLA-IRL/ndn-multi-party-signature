@@ -5,10 +5,6 @@
 #include <bls/bls384_256.h>
 #include <iostream>
 #include <map>
-#include <ndn-cxx/data.hpp>
-#include <ndn-cxx/interest.hpp>
-#include <ndn-cxx/security/certificate.hpp>
-
 #include "mps-signer-list.hpp"
 #include "ndnmps/schema.hpp"
 

@@ -3,6 +3,9 @@
 
 #include <cstdint>
 #include <iostream>
+#include <ndn-cxx/data.hpp>
+#include <ndn-cxx/interest.hpp>
+#include <ndn-cxx/security/certificate.hpp>
 #include <ndn-cxx/encoding/tlv.hpp>
 
 #ifdef NDNMPS_HAVE_TESTS
@@ -25,6 +28,10 @@ namespace tlv {
  * Custom tlv types for Multi-signature protocol packet encoding
  */
 enum : uint32_t {
+  InitializationVector = 157,
+  EncryptedPayload = 159,
+  AuthenticationTag = 175,
+
   MpsSignerList = 200,
   Status = 203,
   UnsignedWrapperName = 205,
