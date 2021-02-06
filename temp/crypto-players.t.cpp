@@ -135,6 +135,7 @@ BOOST_AUTO_TEST_CASE(TestSignerVerifierSelfCert)
 
   MpsVerifier loader;
   BOOST_CHECK_NO_THROW(loader.addCert(cert));
+  BOOST_CHECK(MpsVerifier::verifySignature(cert, cert));
 }
 
 BOOST_AUTO_TEST_CASE(TestSignerVerifierSelfBadCert)
