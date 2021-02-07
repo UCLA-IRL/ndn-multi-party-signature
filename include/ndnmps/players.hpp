@@ -8,6 +8,7 @@
 #include <ndn-cxx/util/scheduler.hpp>
 
 #include "ndnmps/crypto-players.hpp"
+#include "ndnmps/bls-helpers.hpp"
 #include "mps-signer-list.hpp"
 #include "ndnmps/schema.hpp"
 
@@ -20,7 +21,6 @@ namespace mps {
  */
 class Signer {
 private:
-  Name m_prefix;
   Face& m_face;
   function<bool(const Data&)> m_dataVerifyCallback;
   function<bool(const Interest&)> m_interestVerifyCallback;
@@ -30,13 +30,19 @@ private:
   struct RequestInstance {
     // ECDH State: AES Key, HMAC Key
     ReplyCode code;
-    Block signatureValue;
+    Buffer signatureValue;
     size_t version;
   };
   std::map<uint64_t, RequestInstance> m_results;
 
+  // Self key pair
+  BLSSecretKey m_sk;
+  BLSPublicKey m_pk;
+  Name m_keyName;
+
 public:
   std::unique_ptr<MpsSigner> m_signer;
+  const Name m_prefix;
 
 public:
   /**
@@ -45,7 +51,7 @@ public:
    * @param prefix the routable prefix to register prefix to
    * @param face the network interface.
    */
-  Signer(std::unique_ptr<MpsSigner> mpsSigner, const Name& prefix, Face& face);
+  Signer(std::unique_ptr<MpsSigner> mpsSigner, const Name& prefix, Face& face, const Name& keyName);
 
   /**
    * the destructor. Currently remove the prefix registration.
@@ -66,6 +72,11 @@ public:
    */
   void
   setSignatureVerifyCallback(const function<bool(const Interest&)>& func);
+
+  const BLSPublicKey&
+  getPublicKey() {
+    return m_pk;
+  }
 
 private:
   void
@@ -96,7 +107,12 @@ private:
   std::map<Name, std::set<uint32_t>> m_index;
   Face& m_face;
   function<bool(const Data&)> m_certVerifyCallback;
-  bool m_fetchKeys;
+  bool m_fetchKeys = false;
+
+  // trusted certs
+  std::map<Name, BLSPublicKey> m_trustedCerts;
+  // known schemas
+  MultipartySchemaContainer m_schemas;
 
 public:
   std::unique_ptr<MpsVerifier> m_verifier;
@@ -127,6 +143,12 @@ public:
   asyncVerifySignature(shared_ptr<const Data> data,
                        shared_ptr<const MultipartySchema> schema,
                        const VerifyFinishCallback& callback);
+
+  bool
+  verify(const Data& data, const Data& signatureInfoData);
+
+  void
+  asyncVerify(const Data& data, const VerifyFinishCallback& callback);
 
 private:
   void

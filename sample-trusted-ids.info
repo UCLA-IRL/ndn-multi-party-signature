@@ -1,0 +1,13 @@
+ids
+{
+  ""
+  {
+    key-name /example/a/KEY/123
+    key-hex e3e3765618b1916b41e646ed1bb28504701e36f75eba29841e52417ce37a6b2f
+  }
+  ""
+  {
+    key-name /example/a/KEY/456
+    key-hex 1d1fcd23590999cddc78037dce3721d31b4cbfd1a8737f48229239c8fb298067
+  }
+}

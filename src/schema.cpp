@@ -1,9 +1,10 @@
 #include "ndnmps/schema.hpp"
-#include <fstream>
-#include <sstream>
-#include <boost/property_tree/ptree.hpp>
+
 #include <boost/property_tree/info_parser.hpp>
 #include <boost/property_tree/json_parser.hpp>
+#include <boost/property_tree/ptree.hpp>
+#include <fstream>
+#include <sstream>
 #include <utility>
 
 namespace ndn {
@@ -11,7 +12,7 @@ namespace mps {
 
 typedef boost::property_tree::ptree SchemaSection;
 
-const static std::string CONFIG_DATA_NAME = "data-name";
+const static std::string CONFIG_PKT_NAME = "pkt-name";
 const static std::string CONFIG_RULE_ID = "rule-id";
 const static std::string CONFIG_ALL_OF = "all-of";
 const static std::string CONFIG_AT_LEAST_NUM = "at-least-num";
@@ -30,41 +31,45 @@ fromSchemaSection(const SchemaSection& config)
 {
   MultipartySchema schema;
   parseAssert(config.begin() != config.end() &&
-              config.get(CONFIG_DATA_NAME, "") != "" &&
+              config.get(CONFIG_PKT_NAME, "") != "" &&
               config.get(CONFIG_RULE_ID, "") != "");
-  schema.prefix = WildCardName(config.get(CONFIG_DATA_NAME, ""));
-  schema.ruleId = config.get(CONFIG_RULE_ID, "");
-  schema.minOptionalSigners = config.get(CONFIG_AT_LEAST_NUM, 0);
+  schema.m_pktName = WildCardName(config.get(CONFIG_PKT_NAME, ""));
+  schema.m_ruleId = config.get(CONFIG_RULE_ID, "");
+  schema.m_minOptionalSigners = config.get(CONFIG_AT_LEAST_NUM, 0);
   auto allOfSection = config.get_child_optional(CONFIG_ALL_OF);
   if (allOfSection != boost::none) {
     for (auto it = allOfSection->begin(); it != allOfSection->end(); it++) {
-      schema.signers.emplace_back(it->second.data());
+      schema.m_signers.emplace_back(it->second.data());
     }
   }
   auto atLeastSection = config.get_child_optional(CONFIG_AT_LEAST);
   if (atLeastSection != boost::none) {
     for (auto it = atLeastSection->begin(); it != atLeastSection->end(); it++) {
-      schema.optionalSigners.emplace_back(it->second.data());
+      schema.m_optionalSigners.emplace_back(it->second.data());
     }
   }
   return schema;
 }
 
 WildCardName::WildCardName(const Name& format)
-        :Name(format)
-{}
+    : Name(format)
+{
+}
 
 WildCardName::WildCardName(const std::string& str)
-        :Name(str)
-{}
+    : Name(str)
+{
+}
 
-WildCardName::WildCardName(const char * str)
-        :Name(str)
-{}
+WildCardName::WildCardName(const char* str)
+    : Name(str)
+{
+}
 
 WildCardName::WildCardName(const Block& block)
-        :Name(block)
-{}
+    : Name(block)
+{
+}
 
 bool
 WildCardName::match(const Name& name) const
@@ -84,8 +89,9 @@ MultipartySchema::fromJSON(const std::string& fileOrConfigStr)
 {
   SchemaSection config;
   try {
-    boost::property_tree::json_parser::read_json(fileOrConfigStr, config); // as filename
-  } catch (const std::exception&) {
+    boost::property_tree::json_parser::read_json(fileOrConfigStr, config);  // as filename
+  }
+  catch (const std::exception&) {
     std::istringstream ss(fileOrConfigStr);
     boost::property_tree::json_parser::read_json(ss, config);
   }
@@ -97,8 +103,9 @@ MultipartySchema::fromINFO(const std::string& fileOrConfigStr)
 {
   SchemaSection config;
   try {
-    boost::property_tree::info_parser::read_info(fileOrConfigStr, config); // as filename
-  } catch (const std::exception&) {
+    boost::property_tree::info_parser::read_info(fileOrConfigStr, config);  // as filename
+  }
+  catch (const std::exception&) {
     std::istringstream ss(fileOrConfigStr);
     boost::property_tree::info_parser::read_info(ss, config);
   }
@@ -106,21 +113,22 @@ MultipartySchema::fromINFO(const std::string& fileOrConfigStr)
 }
 
 MultipartySchema::MultipartySchema()
-        : minOptionalSigners(0)
-{}
+    : m_minOptionalSigners(0)
+{
+}
 
 std::string
 MultipartySchema::toString()
 {
   SchemaSection content;
-  content.put(CONFIG_DATA_NAME, this->prefix.toUri());
-  content.put(CONFIG_RULE_ID, this->ruleId);
-  if (this->minOptionalSigners > 0) {
-    content.put(CONFIG_AT_LEAST_NUM, this->minOptionalSigners);
+  content.put(CONFIG_PKT_NAME, m_prefix.toUri());
+  content.put(CONFIG_RULE_ID, m_ruleId);
+  if (m_minOptionalSigners > 0) {
+    content.put(CONFIG_AT_LEAST_NUM, m_minOptionalSigners);
   }
-  if (!signers.empty()) {
+  if (!m_signers.empty()) {
     SchemaSection signersNode;
-    for (const auto& signer : this->signers) {
+    for (const auto& signer : m_signers) {
       // Create an unnamed node containing the value
       SchemaSection signerNode;
       signerNode.put("", signer.toUri());
@@ -128,9 +136,9 @@ MultipartySchema::toString()
     }
     content.add_child(CONFIG_ALL_OF, signersNode);
   }
-  if (!optionalSigners.empty()) {
+  if (!m_optionalSigners.empty()) {
     SchemaSection optionalSignersNode;
-    for (const auto& signer : this->optionalSigners) {
+    for (const auto& signer : m_optionalSigners) {
       SchemaSection signerNode;
       signerNode.put("", signer.toUri());
       optionalSignersNode.push_back(std::make_pair("", signerNode));
@@ -147,12 +155,12 @@ std::vector<Name>
 MultipartySchema::getKeyMatches(const Name& key) const
 {
   std::vector<Name> matches;
-  for (const auto& signer : signers) {
+  for (const auto& signer : m_signers) {
     if (signer.match(key)) {
       matches.emplace_back(signer);
     }
   }
-  for (const auto& signer : optionalSigners) {
+  for (const auto& signer : m_optionalSigners) {
     if (signer.match(key)) {
       matches.emplace_back(signer);
     }
@@ -181,7 +189,7 @@ MultipartySchema::getMinSigners(const std::vector<Name>& availableKeys) const
     }
   }
   std::set<Name> resultSet;
-  for (const auto& requiredSigner : this->signers) {
+  for (const auto& requiredSigner : m_signers) {
     if (matches.count(requiredSigner) == 0) {
       return std::set<Name>();
     }
@@ -190,17 +198,29 @@ MultipartySchema::getMinSigners(const std::vector<Name>& availableKeys) const
     }
   }
   size_t count = 0;
-  for (const auto& optionalSigner : this->optionalSigners) {
+  for (const auto& optionalSigner : m_optionalSigners) {
     if (matches.count(optionalSigner) != 0) {
       count++;
       resultSet.insert(matches.at(optionalSigner));
     }
-    if (count >= this->minOptionalSigners) break;
+    if (count >= m_minOptionalSigners)
+      break;
   }
-  if (count < this->minOptionalSigners) {
+  if (count < m_minOptionalSigners) {
     return std::set<Name>();
   }
   return resultSet;
+}
+
+bool
+MultipartySchemaContainer::isSatisfied(const Name& packetName, const MpsSignerList& signers) const
+{
+  for (const auto& schema : m_schemas) {
+    if (schema.match(packetName)) {
+      return schema.isSatisfied(signers);
+    }
+  }
+  return false;
 }
 
 }  // namespace mps

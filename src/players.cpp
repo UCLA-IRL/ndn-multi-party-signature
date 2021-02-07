@@ -20,11 +20,16 @@ onRegisterFail(const Name& prefix, const std::string& reason)
   NDN_LOG_ERROR("Fail to register prefix " << prefix.toUri() << " because " << reason);
 }
 
-Signer::Signer(std::unique_ptr<MpsSigner> mpsSigner, const Name& prefix, Face& face)
+Signer::Signer(std::unique_ptr<MpsSigner> mpsSigner, const Name& prefix, Face& face, const Name& keyName)
     : m_signer(std::move(mpsSigner))
     , m_prefix(prefix)
+    , m_keyName(keyName)
     , m_face(face)
 {
+  // generate default key randomly
+  m_sk.init();
+  m_sk.getPublicKey(m_pk);
+
   Name invocationPrefix = m_prefix;
   invocationPrefix.append("mps").append("sign");
   m_handles.push_back(m_face.setInterestFilter(
@@ -118,7 +123,7 @@ Signer::onSignRequest(const Interest& interest)
         // generate result
         m_results[randomId].code = code;
         if (code == ReplyCode::OK) {
-          m_results[randomId].signatureValue = m_signer->getSignature(unsignedData);
+          m_results[randomId].signatureValue = ndnGenBLSSignature(m_sk, unsignedData);
         }
       },
       [&](auto& interest, auto&) {
@@ -162,7 +167,7 @@ Signer::onResultFetch(const Interest& interest)
   }
   else if (requestInstance.code == ReplyCode::OK) {
     m_results.erase(it);
-    contentBlock.push_back(requestInstance.signatureValue);
+    contentBlock.push_back(Block(ndn::tlv::SignatureValue, std::make_shared<Buffer>(requestInstance.signatureValue)));
   }
   else {
     m_results.erase(it);
@@ -170,7 +175,7 @@ Signer::onResultFetch(const Interest& interest)
   contentBlock.encode();
   result.setContent(contentBlock);
   result.setFreshnessPeriod(TIMEOUT);
-  m_signer->sign(result);
+  ndnBLSSign(m_sk, result, m_keyName);
   m_face.put(result);
 }
 
@@ -189,7 +194,7 @@ Signer::generateAck(const Name& interestName, ReplyCode code, uint64_t requestId
   contentBlock.encode();
   ack.setContent(contentBlock);
   ack.setFreshnessPeriod(TIMEOUT);
-  m_signer->sign(ack);
+  ndnBLSSign(m_sk, ack, m_keyName);
   return ack;
 }
 
@@ -206,9 +211,9 @@ Verifier::setCertVerifyCallback(const function<bool(const Data&)>& func)
 }
 
 void
-Verifier::asyncVerifySignature(shared_ptr<const Data> data, 
-shared_ptr<const MultipartySchema> schema, 
-const VerifyFinishCallback& callback)
+Verifier::asyncVerifySignature(shared_ptr<const Data> data,
+                               shared_ptr<const MultipartySchema> schema,
+                               const VerifyFinishCallback& callback)
 {
   uint32_t currentId = random::generateSecureWord32();
   if (m_verifier->readyToVerify(*data)) {

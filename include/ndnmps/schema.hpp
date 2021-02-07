@@ -36,15 +36,14 @@ public:
 
 /**
  * @brief configuration file to guide signing and verification.
- * TODO can be let a schema refer to other schema? we can make much more complex rules from it.
  */
 class MultipartySchema {
 public:
-  WildCardName prefix; // Data name
-  std::string ruleId; // rule ID
-  std::vector<WildCardName> signers; // required signers
-  std::vector<WildCardName> optionalSigners; // optional signers
-  size_t minOptionalSigners; // min required optional signers
+  WildCardName m_pktName; // Data name
+  std::string m_ruleId; // rule ID
+  std::vector<WildCardName> m_signers; // required signers
+  std::vector<WildCardName> m_optionalSigners; // optional signers
+  size_t m_minOptionalSigners; // min required optional signers
 
 public:
   /**
@@ -70,6 +69,11 @@ public:
    */
   MultipartySchema();
 
+  bool
+  match(const Name& packetName) {
+    return m_pktName.match(packetName);
+  }
+
   /**
    * Encode the schema to (INFO) string.
    * @return the corresponding INFO string.
@@ -91,7 +95,7 @@ public:
    * @return true if the locator satisifies this schema
    */
   bool
-  isSatisfied(const MpsSignerList& locator) const;
+  isSatisfied(const MpsSignerList& signers) const;
 
   /**
    * the the minimum possible signer set from the available signing party
@@ -101,6 +105,20 @@ public:
    */
   std::set<Name>
   getMinSigners(const std::vector<Name>& availableKeys) const;
+};
+
+class MultipartySchemaContainer
+{
+public:
+  std::list<MultipartySchema> m_schemas;
+  std::map<Name, BLSPublicKey> m_trustedIds;
+
+public:
+  void
+  loadTrustedIds(const std::string& fileOrConfigStr) const;
+
+  bool
+  isSatisfied(const MpsSignerList& signers) const;
 };
 
 }  // namespace mps
