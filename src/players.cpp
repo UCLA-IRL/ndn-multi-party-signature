@@ -12,6 +12,7 @@ NDN_LOG_INIT(ndnmps.players);
 
 const time::milliseconds TIMEOUT = time::seconds(4);
 const time::milliseconds ESTIMATE_PROCESS_TIME = time::seconds(1);
+const static Name HMAC_KEY_PREFIX("/ndn/mps/hmac"); // append request ID when being used
 
 void
 onRegisterFail(const Name& prefix, const std::string& reason)
@@ -196,8 +197,7 @@ Verifier::Verifier(std::unique_ptr<MpsVerifier> verifier, Face& face, bool fetch
     : m_verifier(std::move(verifier))
     , m_face(face)
     , m_fetchKeys(fetchKeys)
-{
-}
+{}
 
 void
 Verifier::setCertVerifyCallback(const function<bool(const Data&)>& func)
@@ -206,7 +206,9 @@ Verifier::setCertVerifyCallback(const function<bool(const Data&)>& func)
 }
 
 void
-Verifier::asyncVerifySignature(shared_ptr<const Data> data, shared_ptr<const MultipartySchema> schema, const VerifyFinishCallback& callback)
+Verifier::asyncVerifySignature(shared_ptr<const Data> data, 
+shared_ptr<const MultipartySchema> schema, 
+const VerifyFinishCallback& callback)
 {
   uint32_t currentId = random::generateSecureWord32();
   if (m_verifier->readyToVerify(*data)) {

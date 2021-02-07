@@ -1,9 +1,8 @@
 #include "ndnmps/crypto-players.hpp"
-
 #include "ndnmps/common.hpp"
+#include <ndn-cxx/util/random.hpp>
 #include <set>
 #include <utility>
-#include <ndn-cxx/util/random.hpp>
 
 namespace ndn {
 namespace mps {
@@ -70,7 +69,7 @@ MpsSigner::getpublicKeyStr() const
     NDN_THROW(std::runtime_error("Fail to write public key in Signer::getpublicKeyStr()"));
   }
   outputBuf.resize(written_size);
-  return std::move(outputBuf);
+  return outputBuf;
 }
 
 Block
@@ -108,7 +107,7 @@ void
 MpsSigner::sign(Data& data, const Name& keyLocatorName) const
 {
   SignatureInfo info(static_cast<ndn::tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
-                     keyLocatorName.empty()? m_signerName : keyLocatorName);
+                     keyLocatorName.empty() ? m_signerName : keyLocatorName);
   sign(data, info);
 }
 
@@ -116,7 +115,7 @@ void
 MpsSigner::sign(Interest& interest, const Name& keyLocatorName) const
 {
   SignatureInfo info(static_cast<ndn::tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
-                     keyLocatorName.empty()? m_signerName : keyLocatorName);
+                     keyLocatorName.empty() ? m_signerName : keyLocatorName);
 
   sign(interest, info);
 }
@@ -148,7 +147,8 @@ MpsSigner::sign(Interest& interest, const SignatureInfo& sigInfo) const
   blsSignature sig;
   if (buf.size() == 1) {
     blsSign(&sig, &m_sk, buf.at(0).first, buf.at(0).second);
-  } else {
+  }
+  else {
     EncodingBuffer encoder;
     for (const auto& arr : buf) {
       encoder.appendByteArray(arr.first, arr.second);
@@ -184,7 +184,6 @@ MpsSigner::getSelfSignCert(const security::ValidityPeriod& period) const
   sign(newCert, signatureInfo);
   return newCert;
 }
-
 
 MpsVerifier::MpsVerifier()
 {
@@ -354,8 +353,9 @@ MpsVerifier::verifySignature(const Data& data, const MultipartySchema& schema) c
 }
 
 bool
-MpsVerifier::verifySignature(const Interest& interest) const {
-  const auto &sigInfo = interest.getSignatureInfo();
+MpsVerifier::verifySignature(const Interest& interest) const
+{
+  const auto& sigInfo = interest.getSignatureInfo();
   if (!sigInfo || (sigInfo->getCustomTlv(ndn::tlv::ValidityPeriod) && !sigInfo->getValidityPeriod().isValid())) {
     return false;
   }
@@ -366,7 +366,7 @@ MpsVerifier::verifySignature(const Interest& interest) const {
   blsPublicKey aggKey = m_certs.at(sigInfo->getKeyLocator().getName());
 
   //get signature value
-  const auto &sigValue = interest.getSignatureValue();
+  const auto& sigValue = interest.getSignatureValue();
   blsSignature sig;
   if (blsSignatureDeserialize(&sig, sigValue.value(), sigValue.value_size()) == 0)
     return false;
@@ -374,11 +374,12 @@ MpsVerifier::verifySignature(const Interest& interest) const {
   //verify
   auto signedRanges = interest.extractSignedRanges();
   if (signedRanges.size() == 1) {  // to avoid copying in current ndn-cxx impl
-    const auto &it = signedRanges.begin();
+    const auto& it = signedRanges.begin();
     return blsVerify(&sig, &aggKey, it->first, it->second);
-  } else {
+  }
+  else {
     EncodingBuffer encoder;
-    for (const auto &it : signedRanges) {
+    for (const auto& it : signedRanges) {
       encoder.appendByteArray(it.first, it.second);
     }
     return blsVerify(&sig, &aggKey, encoder.buf(), encoder.size());
@@ -415,10 +416,9 @@ MpsVerifier::verifySignaturePiece(const Data& dataWithInfo, const Name& signedBy
   if (blsSignatureDeserialize(&sig, signaturePiece.value(), signaturePiece.value_size()) == 0)
     return false;
 
-
-    EncodingBuffer encoder;
-    dataWithInfo.wireEncode(encoder, true);
-    return blsVerify(&sig, &publicKey, encoder.buf(), encoder.size());
+  EncodingBuffer encoder;
+  dataWithInfo.wireEncode(encoder, true);
+  return blsVerify(&sig, &publicKey, encoder.buf(), encoder.size());
 }
 
 bool

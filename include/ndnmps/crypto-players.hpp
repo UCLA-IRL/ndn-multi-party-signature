@@ -3,8 +3,10 @@
 
 #define BLS_ETH
 #include <bls/bls384_256.h>
+
 #include <iostream>
 #include <map>
+
 #include "mps-signer-list.hpp"
 #include "ndnmps/schema.hpp"
 

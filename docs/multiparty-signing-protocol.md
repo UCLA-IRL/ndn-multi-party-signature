@@ -89,7 +89,7 @@ Specifically, for each `I` and `S`, the protocol sets:
   * Content:
 
     * `ecdh-pub`, the public key for ECDH.
-    * (Encrypted) `Status`, Status code: 102 Processing, 500 Internal Error, 503 Unavailable
+    * (Encrypted) `Status`, Status code: 102 Processing, 401 Unauthorized, 424 Failed Dependency
     * (Encrypted) `Result_after`, Estimated time of finishing the signing process.
     * (Encrypted) `Result_name`, the future result Data packet name `D_Signed_S.Name`.
 
@@ -114,8 +114,8 @@ Specifically, for each `I` and `S`, the protocol sets:
     * (Encrypted) `Status`, Status code: 102 Processing, 200 OK,
                 404 Not Found, 401 Unauthorized, 424 Failed Dependency,
                 500 Internal Error, 503 Unavailable,
-    * (Encrypted) `Result_after`, Estimated time of finishing the signing process.
-    * (Encrypted) `Result_name`, a new future result Data packet name `D_Signed_S.Name` whose version is renewed.
+    * (Encrypted) (Only when 102 Processing) `Result_after`, Estimated time of finishing the signing process.
+    * (Encrypted) (Only when 102 Processing) `Result_name`, a new future result Data packet name `D_Signed_S.Name` whose version is renewed.
     * (Encrypted) (Only when 200 OK) Signature Value of `D_Signed_S`. Note the keylocator must be `SignRequest.KeyLocator_Name`
 
   * Signature: HAMC

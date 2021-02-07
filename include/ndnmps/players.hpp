@@ -4,11 +4,10 @@
 #include <iostream>
 #include <map>
 #include <tuple>
-#include <ndn-cxx/data.hpp>
 #include <ndn-cxx/face.hpp>
 #include <ndn-cxx/util/scheduler.hpp>
 
-#include "crypto-players.hpp"
+#include "ndnmps/crypto-players.hpp"
 #include "mps-signer-list.hpp"
 #include "ndnmps/schema.hpp"
 
@@ -125,7 +124,9 @@ public:
    * @param callback the callback then the verification finished. It will be called eventually.
    */
   void
-  asyncVerifySignature(shared_ptr<const Data> data, shared_ptr<const MultipartySchema> schema, const VerifyFinishCallback& callback);
+  asyncVerifySignature(shared_ptr<const Data> data,
+                       shared_ptr<const MultipartySchema> schema,
+                       const VerifyFinishCallback& callback);
 
 private:
   void
