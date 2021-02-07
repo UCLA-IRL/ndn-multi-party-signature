@@ -81,16 +81,16 @@ ndnGenBLSSelfCert(const BLSPublicKey& pubKey, const BLSSecretKey& signingkey,
                          const security::ValidityPeriod& period);
 
 bool
-ndnBLSVerify(const BLSPublicKey& pubKey, Data& data);
+ndnBLSVerify(const BLSPublicKey& pubKey, const Data& data);
 
 bool
-ndnBLSVerify(const std::vector<BLSPublicKey>& pubKeys, Data& data);
+ndnBLSVerify(const std::vector<BLSPublicKey>& pubKeys, const Data& data);
 
 bool
-ndnBLSVerify(const BLSPublicKey& pubKey, Interest& interest);
+ndnBLSVerify(const BLSPublicKey& pubKey, const Interest& interest);
 
 bool
-ndnBLSVerify(const std::vector<BLSPublicKey>& pubKeys, Interest& interest);
+ndnBLSVerify(const std::vector<BLSPublicKey>& pubKeys, const Interest& interest);
 
 BLSPublicKey
 ndnBLSAggregatePublicKey(const std::vector<BLSPublicKey>& pubKeys);

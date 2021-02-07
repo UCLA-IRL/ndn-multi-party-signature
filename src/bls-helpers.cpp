@@ -90,8 +90,7 @@ ndnBLSSign(const BLSSecretKey& signingKey, Interest& interest, const SignatureIn
     signingKey.sign(sig, contiguousBuf.data(), contiguousBuf.size());
   }
   auto sigStr = sig.getStr();
-  auto sigBuf = make_shared<Buffer>(sigStr.size());
-  sigBuf->insert(sigBuf->end(), sigStr.begin(), sigStr.end());
+  auto sigBuf = make_shared<Buffer>(Buffer(sigStr.data(), sigStr.size()));
   interest.setSignatureValue(sigBuf);
   interest.wireEncode();
 }
@@ -116,7 +115,7 @@ genSelfSignedCertificate(const Name& keyName,
 }
 
 bool
-ndnBLSVerify(const BLSPublicKey& pubKey, Data& data)
+ndnBLSVerify(const BLSPublicKey& pubKey, const Data& data)
 {
   // get signature value
   const auto& sigValue = data.getSignatureValue();
@@ -133,7 +132,7 @@ ndnBLSVerify(const BLSPublicKey& pubKey, Data& data)
 }
 
 bool
-ndnBLSVerify(const std::vector<BLSPublicKey>& pubKeys, Data& data)
+ndnBLSVerify(const std::vector<BLSPublicKey>& pubKeys, const Data& data)
 {
   BLSPublicKey aggKey = pubKeys[0];
   for (size_t i = 1; i < pubKeys.size(); i++) {
@@ -143,7 +142,7 @@ ndnBLSVerify(const std::vector<BLSPublicKey>& pubKeys, Data& data)
 }
 
 bool
-ndnBLSVerify(const BLSPublicKey& pubKey, Interest& interest)
+ndnBLSVerify(const BLSPublicKey& pubKey, const Interest& interest)
 {
   if (!interest.isSigned()) {
     return false;
@@ -163,7 +162,7 @@ ndnBLSVerify(const BLSPublicKey& pubKey, Interest& interest)
 }
 
 bool
-ndnBLSVerify(const std::vector<BLSPublicKey>& pubKeys, Interest& interest)
+ndnBLSVerify(const std::vector<BLSPublicKey>& pubKeys, const Interest& interest)
 {
   BLSPublicKey aggKey = ndnBLSAggregatePublicKey(pubKeys);
   return ndnBLSVerify(aggKey, interest);
