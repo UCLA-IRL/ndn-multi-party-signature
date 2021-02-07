@@ -46,6 +46,33 @@ ndnGenBLSSignature(const BLSSecretKey& signingKey, const Data& data, const Signa
   return ndnGenBLSSignature(signingKey, dataWithInfo);
 }
 
+Buffer
+ndnGenBLSSignature(const BLSSecretKey& signingKey, const Interest& interest, const SignatureInfo& sigInfo)
+{
+  if (sigInfo.getSignatureType() != tlv::SignatureSha256WithBls) {
+    NDN_THROW(std::runtime_error("Signer got non-BLS signature type"));
+  }
+  auto interestWithInfo = interest;
+  interestWithInfo.setSignatureInfo(sigInfo);
+  return ndnGenBLSSignature(signingKey, interestWithInfo);
+}
+
+Buffer
+ndnGenBLSSignature(const BLSSecretKey& signingKey, const Interest& interest)
+{
+  BLSSignature sig;
+  {
+    auto discontiguousBuf = interest.extractSignedRanges();
+    Buffer contiguousBuf;
+    for (const auto& bufPiece : discontiguousBuf) {
+      contiguousBuf.insert(contiguousBuf.end(), bufPiece.first, bufPiece.first + bufPiece.second);
+    }
+    signingKey.sign(sig, contiguousBuf.data(), contiguousBuf.size());
+  }
+  auto sigStr = sig.getStr();
+  return Buffer(sigStr.data(), sigStr.size());
+}
+
 void
 ndnBLSSign(const BLSSecretKey& signingKey, Data& data, const Name& keyLocatorName)
 {
@@ -80,18 +107,8 @@ ndnBLSSign(const BLSSecretKey& signingKey, Interest& interest, const SignatureIn
     NDN_THROW(std::runtime_error("Bad signature type from signature info " + std::to_string(sigInfo.getSignatureType())));
   }
   interest.setSignatureInfo(sigInfo);
-  BLSSignature sig;
-  {
-    auto discontiguousBuf = interest.extractSignedRanges();
-    Buffer contiguousBuf;
-    for (const auto& bufPiece : discontiguousBuf) {
-      contiguousBuf.insert(contiguousBuf.end(), bufPiece.first, bufPiece.first + bufPiece.second);
-    }
-    signingKey.sign(sig, contiguousBuf.data(), contiguousBuf.size());
-  }
-  auto sigStr = sig.getStr();
-  auto sigBuf = make_shared<Buffer>(Buffer(sigStr.data(), sigStr.size()));
-  interest.setSignatureValue(sigBuf);
+  auto sigValue = std::make_shared<Buffer>(ndnGenBLSSignature(signingKey, interest));
+  interest.setSignatureValue(sigValue);
   interest.wireEncode();
 }
 

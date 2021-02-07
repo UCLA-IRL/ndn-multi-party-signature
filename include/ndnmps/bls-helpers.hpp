@@ -27,7 +27,7 @@ ndnBLSInit();
  * @return the signature value signed by this signer
  */
 Buffer
-ndnGenBLSSignature(const BLSSecretKey& signingkey, const Data& data, const SignatureInfo& sigInfo);
+ndnGenBLSSignature(const BLSSecretKey& signingKey, const Data& data, const SignatureInfo& sigInfo);
 
 /**
  * Return the signature value for the packet with signature info already in the data
@@ -35,7 +35,24 @@ ndnGenBLSSignature(const BLSSecretKey& signingkey, const Data& data, const Signa
  * @return the signature value signed by this signer
  */
 Buffer
-ndnGenBLSSignature(const BLSSecretKey& signingkey, const Data& dataWithInfo);
+ndnGenBLSSignature(const BLSSecretKey& signingKey, const Data& dataWithInfo);
+
+/**
+ * Return the signature value for the packet.
+ * @param data the unsigned data packet
+ * @param sigInfo the signature info to be used
+ * @return the signature value signed by this signer
+ */
+Buffer
+ndnGenBLSSignature(const BLSSecretKey& signingKey, const Interest& interest, const SignatureInfo& sigInfo);
+
+/**
+ * Return the signature value for the packet with signature info already in the data
+ * @param data the unsigned data packet with info
+ * @return the signature value signed by this signer
+ */
+Buffer
+ndnGenBLSSignature(const BLSSecretKey& signingKey, const Interest& interest);
 
 /**
  * sign the packet (as the only signer).
@@ -43,7 +60,7 @@ ndnGenBLSSignature(const BLSSecretKey& signingkey, const Data& dataWithInfo);
  * @param keyLocatorName the key name to place in key locator
  */
 void
-ndnBLSSign(const BLSSecretKey& signingkey, Data& data, const Name& keyLocatorName);
+ndnBLSSign(const BLSSecretKey& signingKey, Data& data, const Name& keyLocatorName);
 
 /**
  * sign the interest packet (as the only signer).
@@ -51,7 +68,7 @@ ndnBLSSign(const BLSSecretKey& signingkey, Data& data, const Name& keyLocatorNam
  * @param keyLocatorName the key name to place in key locator (if empty use this signer's name)
  */
 void
-ndnBLSSign(const BLSSecretKey& signingkey, Interest& interest, const Name& keyLocatorName);
+ndnBLSSign(const BLSSecretKey& signingKey, Interest& interest, const Name& keyLocatorName);
 
 /**
  * sign the packet (as the only signer).
@@ -60,7 +77,7 @@ ndnBLSSign(const BLSSecretKey& signingkey, Interest& interest, const Name& keyLo
  * @param keyLocatorName the key name to place in key locator (if empty use this signer's name)
  */
 void
-ndnBLSSign(const BLSSecretKey& signingkey, Data& data, const SignatureInfo& sigInfo);
+ndnBLSSign(const BLSSecretKey& signingKey, Data& data, const SignatureInfo& sigInfo);
 
 /**
  * sign the interest packet (as the only signer).
@@ -69,7 +86,7 @@ ndnBLSSign(const BLSSecretKey& signingkey, Data& data, const SignatureInfo& sigI
  * @param keyLocatorName the key name to place in key locator (if empty use this signer's name)
  */
 void
-ndnBLSSign(const BLSSecretKey& signingkey, Interest& interest, const SignatureInfo& sigInfo);
+ndnBLSSign(const BLSSecretKey& signingKey, Interest& interest, const SignatureInfo& sigInfo);
 
 /**
  * generate a self sign certificate for this signer
@@ -77,7 +94,7 @@ ndnBLSSign(const BLSSecretKey& signingkey, Interest& interest, const SignatureIn
  * @return the generated certificate
  */
 security::Certificate
-ndnGenBLSSelfCert(const BLSPublicKey& pubKey, const BLSSecretKey& signingkey,
+ndnGenBLSSelfCert(const BLSPublicKey& pubKey, const BLSSecretKey& signingKey,
                          const security::ValidityPeriod& period);
 
 bool

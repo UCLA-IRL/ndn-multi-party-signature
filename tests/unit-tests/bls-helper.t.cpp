@@ -45,26 +45,39 @@ BOOST_AUTO_TEST_CASE(TestSignAndAggregateVerify)
     sks.push_back(sk);
     pks.push_back(pk);
   }
+  auto aggKey = ndnBLSAggregatePublicKey(pks);
 
   Data data;
   data.setName(Name("/a/b/c/d"));
   data.setContent(Name("/1/2/3/4").wireEncode());
+
+  Interest interest(Name("/a/b/c/d"));
+  interest.setApplicationParameters(Name("/1/2/3/4").wireEncode());
+  interest.setCanBePrefix(true);
+
   SignatureInfo info(static_cast<ndn::tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls), Name("/signer/KEY/123"));
 
-  std::vector<Buffer> sigs;
+  std::vector<Buffer> dataSigs;
+  std::vector<Buffer> interestSigs;
   for (const auto& sk : sks) {
-    sigs.emplace_back(ndnGenBLSSignature(sk, data, info));
+    dataSigs.emplace_back(ndnGenBLSSignature(sk, data, info));
+    interestSigs.emplace_back(ndnGenBLSSignature(sk, interest, info));
   }
 
-  auto aggSigBuf = ndnBLSAggregateSignature(sigs);
-  BOOST_CHECK(aggSigBuf.size() > 0);
+  auto aggDataSigBuf = ndnBLSAggregateSignature(dataSigs);
+  auto aggInterestSigBuf = ndnBLSAggregateSignature(interestSigs);
+  BOOST_CHECK(aggDataSigBuf.size() > 0);
+  BOOST_CHECK(aggInterestSigBuf.size() > 0);
 
   data.setSignatureInfo(info);
-  data.setSignatureValue(std::make_shared<Buffer>(aggSigBuf));
+  data.setSignatureValue(std::make_shared<Buffer>(aggDataSigBuf));
   data.wireEncode();
-  auto aggKey = ndnBLSAggregatePublicKey(pks);
-
   BOOST_CHECK(ndnBLSVerify(aggKey, data));
+
+  interest.setSignatureInfo(info);
+  interest.setSignatureValue(std::make_shared<Buffer>(aggInterestSigBuf));
+  interest.wireEncode();
+  BOOST_CHECK(ndnBLSVerify(aggKey, interest));
 }
 
 BOOST_AUTO_TEST_SUITE_END() // TestBLSHelper
