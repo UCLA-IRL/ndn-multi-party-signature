@@ -159,7 +159,7 @@ MultipartySchema::passSchema(const MpsSignerList& signers) const
   for (const auto& requiredSigner : m_signers) {
     found = false;
     for (const auto& item : signers.m_signers) {
-      if (item == requiredSigner) {
+      if (requiredSigner.match(item)) {
         found = true;
         break;
       }
@@ -168,14 +168,12 @@ MultipartySchema::passSchema(const MpsSignerList& signers) const
       return false;
     }
   }
-  if (m_minOptionalSigners == 0) {
-    return true;
-  }
+  // check optional signers
   size_t count = 0;
   for (const auto& optionalSigner : m_optionalSigners) {
     found = false;
     for (const auto& item : signers.m_signers) {
-      if (item == optionalSigner) {
+      if (optionalSigner.match(item)) {
         found = true;
         break;
       }
