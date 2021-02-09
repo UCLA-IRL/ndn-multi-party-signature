@@ -128,9 +128,10 @@ BOOST_AUTO_TEST_CASE(TestSignerVerifierSelfCert)
   MultipartySchema schema;
   schema.signers.emplace_back(signer.getSignerKeyName());
 
+<<<<<<< HEAD:temp/crypto-players.t.cpp
   auto cert = signer.getSelfSignCert(security::ValidityPeriod(time::system_clock::now() - time::seconds(1),
                                                               time::system_clock::now() + time::days(100)));
-
+  BOOST_CHECK(MpsVerifier::verifySignature(cert, cert));
   BOOST_CHECK(verifier.verifySignature(cert, schema));
 
   MpsVerifier loader;
