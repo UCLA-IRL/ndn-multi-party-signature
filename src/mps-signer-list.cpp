@@ -6,17 +6,16 @@ namespace ndn {
 namespace mps {
 
 MpsSignerList::MpsSignerList(std::vector<Name>&& signers)
-    : std::vector<Name>(std::move(signers))
+    : m_signers(std::move(signers))
 {
 }
 
 MpsSignerList::MpsSignerList(const std::vector<Name>& signers)
-    : std::vector<Name>(signers)
+    : m_signers(signers)
 {
 }
 
 MpsSignerList::MpsSignerList(const Block& wire)
-    : std::vector<Name>()
 {
   wireDecode(wire);
 }
@@ -25,7 +24,7 @@ Block
 MpsSignerList::wireEncode() const
 {
   auto wire = Block(tlv::MpsSignerList);
-  for (const auto& item : *this) {
+  for (const auto& item : m_signers) {
     wire.push_back(item.wireEncode());
   }
   wire.encode();
@@ -46,12 +45,13 @@ NDN_CXX_DEFINE_WIRE_ENCODE_INSTANTIATIONS(MpsSignerList);
 void
 MpsSignerList::wireDecode(const Block& wire)
 {
-  if (wire.type() != tlv::MpsSignerList)
+  if (wire.type() != tlv::MpsSignerList) {
     NDN_THROW(ndn::tlv::Error("MultiPartySignerList", wire.type()));
-  clear();
+  }
   wire.parse();
+  m_signers.clear();
   for (const auto& item : wire.elements()) {
-    emplace_back(item);
+    m_signers.emplace_back(item);
   }
 }
 
@@ -59,7 +59,7 @@ std::ostream&
 operator<<(std::ostream& os, const MpsSignerList& signerList)
 {
   os << "MpsSignerList [ ";
-  for (const auto& i : signerList) {
+  for (const auto& i : signerList.m_signers) {
     os << i << ", ";
   }
   return os << "]";

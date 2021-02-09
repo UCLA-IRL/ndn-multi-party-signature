@@ -121,7 +121,7 @@ std::string
 MultipartySchema::toString()
 {
   SchemaSection content;
-  content.put(CONFIG_PKT_NAME, m_prefix.toUri());
+  content.put(CONFIG_PKT_NAME, m_pktName.toUri());
   content.put(CONFIG_RULE_ID, m_ruleId);
   if (m_minOptionalSigners > 0) {
     content.put(CONFIG_AT_LEAST_NUM, m_minOptionalSigners);
@@ -151,76 +151,99 @@ MultipartySchema::toString()
   return ss.str();
 }
 
-std::vector<Name>
-MultipartySchema::getKeyMatches(const Name& key) const
-{
-  std::vector<Name> matches;
-  for (const auto& signer : m_signers) {
-    if (signer.match(key)) {
-      matches.emplace_back(signer);
-    }
-  }
-  for (const auto& signer : m_optionalSigners) {
-    if (signer.match(key)) {
-      matches.emplace_back(signer);
-    }
-  }
-  return matches;
-}
-
 bool
-MultipartySchema::isSatisfied(const MpsSignerList& signers) const
+MultipartySchema::passSchema(const MpsSignerList& signers) const
 {
-  const auto& realSigners = signers;
-  if (getMinSigners(realSigners).empty()) {
-    return false;
-  }
-  return true;
-}
-
-std::set<Name>
-MultipartySchema::getMinSigners(const std::vector<Name>& availableKeys) const
-{
-  std::map<Name, Name> matches;
-  for (const auto& i : availableKeys) {
-    for (const auto& pos : getKeyMatches(i)) {
-      if (matches.count(pos) == 0)
-        matches.emplace(pos, i);
-    }
-  }
-  std::set<Name> resultSet;
+  // make sure all required signers are listed
+  bool found = false;
   for (const auto& requiredSigner : m_signers) {
-    if (matches.count(requiredSigner) == 0) {
-      return std::set<Name>();
+    found = false;
+    for (const auto& item : signers.m_signers) {
+      if (item == requiredSigner) {
+        found = true;
+        break;
+      }
     }
-    else {
-      resultSet.insert(matches.at(requiredSigner));
+    if (!found) {
+      return false;
     }
+  }
+  if (m_minOptionalSigners == 0) {
+    return true;
   }
   size_t count = 0;
   for (const auto& optionalSigner : m_optionalSigners) {
-    if (matches.count(optionalSigner) != 0) {
-      count++;
-      resultSet.insert(matches.at(optionalSigner));
+    found = false;
+    for (const auto& item : signers.m_signers) {
+      if (item == optionalSigner) {
+        found = true;
+        break;
+      }
     }
-    if (count >= m_minOptionalSigners)
-      break;
+    if (found) {
+      count++;
+    }
   }
-  if (count < m_minOptionalSigners) {
-    return std::set<Name>();
+  if (count >= m_minOptionalSigners) {
+    return true;
   }
-  return resultSet;
+  return false;
 }
 
 bool
-MultipartySchemaContainer::isSatisfied(const Name& packetName, const MpsSignerList& signers) const
+MultipartySchemaContainer::passSchema(const Name& packetName, const MpsSignerList& signers) const
 {
   for (const auto& schema : m_schemas) {
     if (schema.match(packetName)) {
-      return schema.isSatisfied(signers);
+      return schema.passSchema(signers);
     }
   }
   return false;
+}
+
+MpsSignerList
+MultipartySchemaContainer::getAvailableSigners(const MultipartySchema& schema) const
+{
+  std::set<Name> resultSet;
+  for (const auto& item : schema.m_signers) {
+    resultSet.insert(item);
+  }
+  size_t count = 0;
+  for (const auto& item : schema.m_optionalSigners) {
+    if (m_trustedIds.count(item) != 0 && count < schema.m_minOptionalSigners) {
+      resultSet.insert(item);
+      count++;
+    }
+    if (count >= schema.m_minOptionalSigners) {
+      break;
+    }
+  }
+  if (count < schema.m_minOptionalSigners) {
+    return MpsSignerList();
+  }
+  return MpsSignerList(std::vector<Name>(resultSet.begin(), resultSet.end()));
+}
+
+BLSPublicKey
+MultipartySchemaContainer::aggregateKey(const MpsSignerList& signers) const
+{
+  BLSPublicKey aggKey;
+  bool init = false;
+  for (const auto& item : signers.m_signers) {
+    if (m_trustedIds.count(item) != 0) {
+      if (!init) {
+        aggKey = m_trustedIds.at(item);
+        init = true;
+      }
+      else {
+        aggKey.add(m_trustedIds.at(item));
+      }
+    }
+    else {
+      NDN_THROW(std::runtime_error("Schema container does not have sufficient keys. Missing key for " + item.toUri()));
+    }
+  }
+  return aggKey;
 }
 
 }  // namespace mps

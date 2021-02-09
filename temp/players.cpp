@@ -72,8 +72,8 @@ Signer::onSignRequest(const Interest& interest)
   paramBlock.parse();
   Name wrapperName;
   try {
-    if (paramBlock.get(tlv::UnsignedWrapperName).isValid()) {
-      wrapperName.wireDecode(paramBlock.get(tlv::UnsignedWrapperName).blockFromValue());
+    if (paramBlock.get(tlv::ParameterDataName).isValid()) {
+      wrapperName.wireDecode(paramBlock.get(tlv::ParameterDataName).blockFromValue());
       if (!wrapperName.at(-1).isImplicitSha256Digest()) {
         NDN_THROW(std::runtime_error("digest not found for data"));
       }
@@ -433,7 +433,7 @@ Initiator::multiPartySign(const MultipartySchema& schema, std::shared_ptr<Data> 
     Interest interest;
     interest.setName(Name(m_keyToPrefix.at(i)).append("mps").append("sign"));
     Block appParam(ndn::tlv::ApplicationParameters);
-    appParam.push_back(makeNestedBlock(tlv::UnsignedWrapperName, wrapperFullName));
+    appParam.push_back(makeNestedBlock(tlv::ParameterDataName, wrapperFullName));
     interest.setApplicationParameters(appParam);
     interest.setInterestLifetime(TIMEOUT);
     if (m_signer.index() == 0) {

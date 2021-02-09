@@ -9,10 +9,12 @@
 namespace ndn {
 namespace mps {
 
-class MpsSignerList: public std::vector<Name> {
+class MpsSignerList
+{
+public:
+  std::vector<Name> m_signers;
 
 public:  // constructors
-
   /** \brief Construct an empty list.
    *  \post `empty() == true`
    */
@@ -60,8 +62,8 @@ public:
    */
   bool
   operator==(const MpsSignerList& rhs) {
-    std::vector<Name> nameList(this->begin(), this->end());
-    std::vector<Name> rhsNameList(rhs.begin(), rhs.end());
+    std::vector<Name> nameList(m_signers.begin(), m_signers.end());
+    std::vector<Name> rhsNameList(rhs.m_signers.begin(), rhs.m_signers.end());
     std::sort(nameList.begin(), nameList.end());
     std::sort(rhsNameList.begin(), rhsNameList.end());
     return nameList == rhsNameList;

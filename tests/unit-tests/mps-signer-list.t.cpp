@@ -10,7 +10,7 @@ BOOST_AUTO_TEST_SUITE(TestMpsSignerList)
 BOOST_AUTO_TEST_CASE(EmptyList)
 {
   MpsSignerList a;
-  BOOST_CHECK_EQUAL(a.empty(), true);
+  BOOST_CHECK(a.m_signers.empty());
 
   Block wire = a.wireEncode();
   // These octets are obtained from the snippet below.
@@ -24,14 +24,14 @@ BOOST_AUTO_TEST_CASE(EmptyList)
                                 wire.begin(), wire.end());
 
   MpsSignerList b(wire);
-  BOOST_CHECK_EQUAL(a, b);
-  BOOST_CHECK_EQUAL(a.empty(), true);
+  BOOST_CHECK(a.m_signers == b.m_signers);
+  BOOST_CHECK(a.m_signers.empty());
 }
 
 BOOST_AUTO_TEST_CASE(Encoding)
 {
   MpsSignerList a;
-  a.emplace_back("/A");
+  a.m_signers.emplace_back("/A");
 
   const Block& wire = a.wireEncode();
   // These octets are obtained from the snippet below.
@@ -46,23 +46,23 @@ BOOST_AUTO_TEST_CASE(Encoding)
                                 wire.begin(), wire.end());
 
   MpsSignerList b(wire);
-  BOOST_CHECK_EQUAL(a, b);
+  BOOST_CHECK(a.m_signers == b.m_signers);
 
   b = a;
-  BOOST_CHECK_EQUAL(a, b);
+  BOOST_CHECK(a.m_signers == b.m_signers);
 }
 
 BOOST_AUTO_TEST_CASE(Encoding2)
 {
   MpsSignerList a;
-  a.emplace_back("/A");
-  a.emplace_back("/b");
-  a.emplace_back("/C");
+  a.m_signers.emplace_back("/A");
+  a.m_signers.emplace_back("/b");
+  a.m_signers.emplace_back("/C");
 
   const Block& wire = a.wireEncode();
 
   MpsSignerList b(wire);
-  BOOST_CHECK_EQUAL(a, b);
+  BOOST_CHECK(a.m_signers == b.m_signers);
 }
 
 BOOST_AUTO_TEST_CASE(Equality)
@@ -72,16 +72,16 @@ BOOST_AUTO_TEST_CASE(Equality)
   BOOST_CHECK_EQUAL(a == b, true);
   BOOST_CHECK_EQUAL(a != b, false);
 
-  a.emplace_back("/A");
+  a.m_signers.emplace_back("/A");
   BOOST_CHECK_EQUAL(a == b, false);
   BOOST_CHECK_EQUAL(a != b, true);
 
-  b.emplace_back("/B");
+  b.m_signers.emplace_back("/B");
   BOOST_CHECK_EQUAL(a == b, false);
   BOOST_CHECK_EQUAL(a != b, true);
 
-  b.emplace_back("/A");
-  a.emplace_back("/B");
+  b.m_signers.emplace_back("/A");
+  a.m_signers.emplace_back("/B");
   BOOST_CHECK_EQUAL(a == b, true);
   BOOST_CHECK_EQUAL(a != b, false);
 }

@@ -334,7 +334,7 @@ BOOST_AUTO_TEST_CASE(SignerFetch)
   Interest signInterest;
   signInterest.setName(Name("/signer/mps/sign"));
   Block appParam(ndn::tlv::ApplicationParameters);
-  appParam.push_back(makeNestedBlock(tlv::UnsignedWrapperName, wrapper.getFullName()));
+  appParam.push_back(makeNestedBlock(tlv::ParameterDataName, wrapper.getFullName()));
   signInterest.setApplicationParameters(appParam);
   signInterest.setCanBePrefix(false);
   signInterest.setMustBeFresh(true);
@@ -427,7 +427,7 @@ BOOST_AUTO_TEST_CASE(SignerFetchTimeout)
   Interest signInterest;
   signInterest.setName(Name("/signer/mps/sign"));
   Block appParam(ndn::tlv::ApplicationParameters);
-  appParam.push_back(makeNestedBlock(tlv::UnsignedWrapperName, wrapper.getFullName()));
+  appParam.push_back(makeNestedBlock(tlv::ParameterDataName, wrapper.getFullName()));
   signInterest.setApplicationParameters(appParam);
   signInterest.setCanBePrefix(false);
   signInterest.setMustBeFresh(true);
@@ -510,7 +510,7 @@ BOOST_AUTO_TEST_CASE(SignerFetchNotFound)
   Interest signInterest;
   signInterest.setName(Name("/signer/mps/sign"));
   Block appParam(ndn::tlv::ApplicationParameters);
-  appParam.push_back(makeEmptyBlock(tlv::UnsignedWrapperName));
+  appParam.push_back(makeEmptyBlock(tlv::ParameterDataName));
   signInterest.setApplicationParameters(appParam);
   signInterest.setCanBePrefix(false);
   signInterest.setMustBeFresh(true);
@@ -578,7 +578,7 @@ BOOST_AUTO_TEST_CASE(SignerFetchBadInit)
   Interest signInterest;
   signInterest.setName(Name("/signer/mps/sign"));
   Block appParam(ndn::tlv::ApplicationParameters);
-  appParam.push_back(makeNestedBlock(tlv::UnsignedWrapperName, wrapper.getName()));
+  appParam.push_back(makeNestedBlock(tlv::ParameterDataName, wrapper.getName()));
   signInterest.setApplicationParameters(appParam);
   signInterest.setCanBePrefix(false);
   signInterest.setMustBeFresh(true);
@@ -627,7 +627,7 @@ BOOST_AUTO_TEST_CASE(SignerFetchBadWrapper)
   Interest signInterest;
   signInterest.setName(Name("/signer/mps/sign"));
   Block appParam(ndn::tlv::ApplicationParameters);
-  appParam.push_back(makeNestedBlock(tlv::UnsignedWrapperName, wrapper.getFullName()));
+  appParam.push_back(makeNestedBlock(tlv::ParameterDataName, wrapper.getFullName()));
   signInterest.setApplicationParameters(appParam);
   signInterest.setCanBePrefix(false);
   signInterest.setMustBeFresh(true);
@@ -753,8 +753,8 @@ BOOST_AUTO_TEST_CASE(InitiatorTest)
     if (Name("/signer/mps/sign").isPrefixOf(interest.getName())) {
       const auto &content = interest.getApplicationParameters();
       content.parse();
-      BOOST_CHECK(content.get(tlv::UnsignedWrapperName).isValid());
-      BOOST_CHECK_NO_THROW(wrapperName = Name(content.get(tlv::UnsignedWrapperName).blockFromValue()));
+      BOOST_CHECK(content.get(tlv::ParameterDataName).isValid());
+      BOOST_CHECK_NO_THROW(wrapperName = Name(content.get(tlv::ParameterDataName).blockFromValue()));
     }
     else if (Name("/signer/mps/result-of").isPrefixOf(interest.getName())) {
       BOOST_CHECK(resultName.isPrefixOf(interest.getName()));
@@ -866,8 +866,8 @@ BOOST_AUTO_TEST_CASE(InitiatorTestTimeout)
     if (Name("/signer/mps/sign").isPrefixOf(interest.getName())) {
       const auto &content = interest.getApplicationParameters();
       content.parse();
-      BOOST_CHECK(content.get(tlv::UnsignedWrapperName).isValid());
-      BOOST_CHECK_NO_THROW(wrapperName = Name(content.get(tlv::UnsignedWrapperName).blockFromValue()));
+      BOOST_CHECK(content.get(tlv::ParameterDataName).isValid());
+      BOOST_CHECK_NO_THROW(wrapperName = Name(content.get(tlv::ParameterDataName).blockFromValue()));
     }
     else {
       std::cout << "interest: " << interest.getName() << std::endl;
@@ -931,8 +931,8 @@ BOOST_AUTO_TEST_CASE(InitiatorTestUnauthorized)
     if (Name("/signer/mps/sign").isPrefixOf(interest.getName())) {
       const auto &content = interest.getApplicationParameters();
       content.parse();
-      BOOST_CHECK(content.get(tlv::UnsignedWrapperName).isValid());
-      BOOST_CHECK_NO_THROW(wrapperName = Name(content.get(tlv::UnsignedWrapperName).blockFromValue()));
+      BOOST_CHECK(content.get(tlv::ParameterDataName).isValid());
+      BOOST_CHECK_NO_THROW(wrapperName = Name(content.get(tlv::ParameterDataName).blockFromValue()));
     }
     else {
       std::cout << "interest: " << interest.getName() << std::endl;
@@ -1024,8 +1024,8 @@ BOOST_AUTO_TEST_CASE(InitiatorTestDataVerifyFail)
     if (Name("/signer/mps/sign").isPrefixOf(interest.getName())) {
       const auto &content = interest.getApplicationParameters();
       content.parse();
-      BOOST_CHECK(content.get(tlv::UnsignedWrapperName).isValid());
-      BOOST_CHECK_NO_THROW(wrapperName = Name(content.get(tlv::UnsignedWrapperName).blockFromValue()));
+      BOOST_CHECK(content.get(tlv::ParameterDataName).isValid());
+      BOOST_CHECK_NO_THROW(wrapperName = Name(content.get(tlv::ParameterDataName).blockFromValue()));
     }
     else if (Name("/signer/mps/result-of").isPrefixOf(interest.getName())) {
       BOOST_CHECK(resultName.isPrefixOf(interest.getName()));
@@ -1149,8 +1149,8 @@ BOOST_AUTO_TEST_CASE(InitiatorTestBadSignature)
     if (Name("/signer/mps/sign").isPrefixOf(interest.getName())) {
       const auto &content = interest.getApplicationParameters();
       content.parse();
-      BOOST_CHECK(content.get(tlv::UnsignedWrapperName).isValid());
-      BOOST_CHECK_NO_THROW(wrapperName = Name(content.get(tlv::UnsignedWrapperName).blockFromValue()));
+      BOOST_CHECK(content.get(tlv::ParameterDataName).isValid());
+      BOOST_CHECK_NO_THROW(wrapperName = Name(content.get(tlv::ParameterDataName).blockFromValue()));
     }
     else if (Name("/signer/mps/result-of").isPrefixOf(interest.getName())) {
       BOOST_CHECK(resultName.isPrefixOf(interest.getName()));

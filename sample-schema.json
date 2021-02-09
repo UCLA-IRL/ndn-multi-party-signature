@@ -1,5 +1,5 @@
 {
-  "data-name": "/example/data",
+  "pkt-name": "/example/data",
   "rule-id": "rule1",
   "all-of": [
     "/example/a/KEY/_/_",

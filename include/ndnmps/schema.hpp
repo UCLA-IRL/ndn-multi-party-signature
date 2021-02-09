@@ -5,6 +5,7 @@
 #include <set>
 #include <list>
 #include "mps-signer-list.hpp"
+#include "bls-helpers.hpp"
 
 namespace ndn {
 namespace mps {
@@ -70,7 +71,7 @@ public:
   MultipartySchema();
 
   bool
-  match(const Name& packetName) {
+  match(const Name& packetName) const {
     return m_pktName.match(packetName);
   }
 
@@ -82,29 +83,12 @@ public:
   toString();
 
   /**
-   * return if the key can be matched to one of the signer.
-   * @param key the key name to be checked
-   * @return true of one of the key name matches one of signing party
-   */
-  std::vector<Name>
-  getKeyMatches(const Name& key) const;
-
-  /**
    * verify if this signer list can satisfy this schema.
    * @param locator the signer list containing all signer party
    * @return true if the locator satisifies this schema
    */
   bool
-  isSatisfied(const MpsSignerList& signers) const;
-
-  /**
-   * the the minimum possible signer set from the available signing party
-   * so the aggregater may be able to reduce the length of signer list
-   * @param availableKeys the available set of signing party
-   * @return the minimum set of signer that can satisfy this schema
-   */
-  std::set<Name>
-  getMinSigners(const std::vector<Name>& availableKeys) const;
+  passSchema(const MpsSignerList& signers) const;
 };
 
 class MultipartySchemaContainer
@@ -115,10 +99,21 @@ public:
 
 public:
   void
-  loadTrustedIds(const std::string& fileOrConfigStr) const;
+  loadTrustedIds(const std::string& fileOrConfigStr);
 
   bool
-  isSatisfied(const MpsSignerList& signers) const;
+  passSchema(const Name& packetName, const MpsSignerList& signers) const;
+
+  /**
+   * the the minimum possible signer set from the available signing party
+   * so the aggregater may be able to reduce the length of signer list
+   * @return the minimum set of signer that can satisfy this schema
+   */
+  MpsSignerList
+  getAvailableSigners(const MultipartySchema& schema) const;
+
+  BLSPublicKey
+  aggregateKey(const MpsSignerList& signers) const;
 };
 
 }  // namespace mps

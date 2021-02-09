@@ -22,9 +22,7 @@ typedef function<void(bool)> VerifyFinishCallback;
 class BLSVerifier {
 private:
   Face& m_face;
-  // trusted certs
-  std::map<Name, BLSPublicKey> m_trustedCerts;
-  // known schemas
+  // known schemas and identities
   MultipartySchemaContainer m_schemas;
 
 public:
@@ -32,7 +30,7 @@ public:
    * Construct the verifier.
    * @param face the network interface.
    */
-  Verifier(Face& face);
+  BLSVerifier(Face& face);
 
   bool
   verify(const Data& data, const Data& signatureInfoData);
