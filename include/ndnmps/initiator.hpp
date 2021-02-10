@@ -46,13 +46,6 @@ public:
   void
   multiPartySign(const Data& unsignedData, const MultipartySchema& schema, const Name& signingKeyName,
                  const SignatureFinishCallback& successCb, const SignatureFailureCallback& failureCb);
-
-private:
-  void
-  onParameterFetch(const Interest& interest);
-
-  void
-  fetchResult(const Name& resultName, std::map<Name, Buffer>& fetchedSignatures);
 };
 
 }  // namespace mps

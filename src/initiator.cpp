@@ -29,16 +29,7 @@ MPSInitiator::MPSInitiator(const Name& prefix, KeyChain& keyChain, Face& face, S
     , m_face(face)
     , m_scheduler(scheduler)
     , m_interestSigner(m_keyChain)
-{
-  Name parameterPrefix = m_prefix;
-  parameterPrefix.append("mps").append("para");
-  m_face.setInterestFilter(parameterPrefix,
-                           std::bind(&MPSInitiator::onParameterFetch, this, _2),
-                           nullptr,
-                           [](const Name& prefix, const std::string& reason) {
-                             NDN_LOG_ERROR("Fail to register prefix " << prefix.toUri() << " because " << reason);
-                           });
-}
+{}
 
 void
 MPSInitiator::multiPartySign(const Data& unsignedData, const MultipartySchema& schema, const Name& signingKeyName,
@@ -84,7 +75,6 @@ MPSInitiator::multiPartySign(const Data& unsignedData, const MultipartySchema& s
                 [paraDataFuture, this] (const auto&, const auto& interest) mutable {
                   std::cout << "\n\nInitiator: Receive Interest for parameter Data from signer." << std::endl;
                   paraDataFuture.wait();
-                  std::cout << "para data ready, reply!" << std::endl;
                   m_face.put(paraDataFuture.get());
                 },
                 nullptr,
@@ -108,10 +98,9 @@ MPSInitiator::multiPartySign(const Data& unsignedData, const MultipartySchema& s
     std::cout << "\n\nInitiator: Send MPS Sign Interest to signer: " << signer.getPrefix(-2).toUri() << std::endl;
     m_face.expressInterest(
         signRequestInt,
-        [keyLocatorName, signers, unfinishedData, paraDataPromise, paraData, fetchedSignatures, fetchCount, finalized, handler, this, &successCb, &failureCb, &signingKeyName](const auto&, const auto& ackData) mutable {  // after fetching the ACK data
-          auto signerName = ackData.getName().getPrefix(-3);
-
-          std::cout << "\n\nInitiator: Fetched ACK Data from signer: " << signerName.toUri() << std::endl;
+        // [keyLocatorName, signers, unfinishedData, paraDataPromise, paraData, fetchedSignatures, fetchCount, finalized, handler, this, &successCb, &failureCb, &signingKeyName](const auto&, const auto& ackData) mutable {  // after fetching the ACK data
+        [=, &successCb, &failureCb, &signingKeyName] (const auto&, const auto& ackData) {  // after fetching the ACK data
+          std::cout << "\n\nInitiator: Fetched ACK Data from signer: " << ackData.getName().getPrefix(-4).toUri() << std::endl;
           std::cout << ackData;
 
           // parse ack content
@@ -136,7 +125,8 @@ MPSInitiator::multiPartySign(const Data& unsignedData, const MultipartySchema& s
 
           // set the scheduler to fetch the result
           m_scheduler.schedule(result_ms,
-                               [keyLocatorName, signers, unfinishedData, fetchedSignatures, fetchCount, finalized, resultName, handler, this, &successCb, &failureCb, &signingKeyName]() {
+                               // [keyLocatorName, signers, unfinishedData, fetchedSignatures, fetchCount, finalized, resultName, handler, this, &successCb, &failureCb, &signingKeyName]() {
+                              [=, &successCb, &failureCb, &signingKeyName]() {
                                  std::cout << "\n\nInitiator: Send Interest for result Data from signer: " << resultName.getPrefix(-4).toUri() << std::endl;
                                  handler.cancel();
                                  Interest resultFetchInt(resultName);
@@ -145,7 +135,8 @@ MPSInitiator::multiPartySign(const Data& unsignedData, const MultipartySchema& s
                                  m_interestSigner.makeSignedInterest(resultFetchInt, signingByKey(signingKeyName));
                                  m_face.expressInterest(
                                      resultFetchInt,
-                                     [keyLocatorName, signers, unfinishedData, fetchedSignatures, fetchCount, finalized, this, &successCb, &failureCb, &signingKeyName](const auto&, const auto& resultData) {
+                                     // [keyLocatorName, signers, unfinishedData, fetchedSignatures, fetchCount, finalized, this, &successCb, &failureCb, &signingKeyName](const auto&, const auto& resultData) {
+                                       [=, &successCb, &failureCb, &signingKeyName](const auto&, const auto& resultData) {
                                        auto signerPrefix = resultData.getName().getPrefix(-4);
 
                                        std::cout << "\n\nInitiator: Fetched result Data from signer: " << signerPrefix.toUri() << std::endl;
