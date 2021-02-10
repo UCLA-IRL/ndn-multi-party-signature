@@ -91,12 +91,12 @@ BLSSigner::onSignRequest(const Interest& interest)
     return;
   }
 
-  auto randomId = random::generateSecureWord64();
+  auto requestId = random::generateSecureWord64();
   RequestInstance instance;
   instance.code = ReplyCode::Processing;
   instance.version = 0;
-  m_results.emplace(randomId, instance);
-  m_face.put(generateAck(interest.getName(), ReplyCode::Processing, randomId));
+  m_results.emplace(requestId, instance);
+  m_face.put(generateAck(interest.getName(), ReplyCode::Processing, requestId));
 
   // fetch parameter
   Interest fetchInterest(parameterDataName);
@@ -106,7 +106,7 @@ BLSSigner::onSignRequest(const Interest& interest)
   std::cout << "\n\nSigner: send Interest to fetch parameter: " << parameterDataName.toUri() << std::endl;
   m_face.expressInterest(
       fetchInterest,
-      [&](auto& interest, auto& data) {
+      [=](const auto& interest, const auto& data) {
         std::cout << "\n\nSigner: fetched parameter Data packet." << std::endl;
         std::cout << data;
 
@@ -125,18 +125,21 @@ BLSSigner::onSignRequest(const Interest& interest)
           code = ReplyCode::Unauthorized;
         }
         // generate result
-        m_results[randomId].code = code;
+        std::cout << "Signer: result status code: " << static_cast<int>(code) << std::endl;
+
+        m_results[requestId].code = code;
         if (code == ReplyCode::OK) {
-          m_results[randomId].signatureValue = ndnGenBLSSignature(m_sk, unsignedData);
+          m_results[requestId].signatureValue = ndnGenBLSSignature(m_sk, unsignedData);
+          std::cout << "signature value length: " << m_results[requestId].signatureValue.size() << std::endl;
         }
       },
-      [&](auto& interest, auto&) {
+      [=](auto& interest, auto&) {
         // nack
-        m_results[randomId].code = ReplyCode::FailedDependency;
+        m_results[requestId].code = ReplyCode::FailedDependency;
       },
-      [&](auto& interest) {
+      [=](auto& interest) {
         // timeout
-        m_results[randomId].code = ReplyCode::FailedDependency;
+        m_results[requestId].code = ReplyCode::FailedDependency;
       });
 }
 
@@ -173,7 +176,8 @@ BLSSigner::onResultFetch(const Interest& interest)
   }
   else if (requestInstance.code == ReplyCode::OK) {
     m_results.erase(it);
-    contentBlock.push_back(Block(ndn::tlv::SignatureValue, std::make_shared<Buffer>(requestInstance.signatureValue)));
+    contentBlock.push_back(makeBinaryBlock(tlv::BLSSigValue, requestInstance.signatureValue.data(), requestInstance.signatureValue.size()));
+    std::cout << "signature value length: " << requestInstance.signatureValue.size() << std::endl;
   }
   else {
     m_results.erase(it);

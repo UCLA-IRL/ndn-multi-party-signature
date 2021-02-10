@@ -1,7 +1,5 @@
 #include "ndnmps/bls-helpers.hpp"
 #include <ndn-cxx/util/random.hpp>
-#include <set>
-#include <utility>
 
 namespace ndn {
 namespace mps {

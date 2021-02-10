@@ -37,6 +37,7 @@ enum : uint32_t {
   ParameterDataName = 205,
   ResultAfter = 209,
   ResultName = 211,
+  BLSSigValue = 213
 };
 
 /** @brief Extended SignatureType values with Multi-Party Signature

@@ -153,8 +153,9 @@ MPSInitiator::multiPartySign(const Data& unsignedData, const MultipartySchema& s
 
                                        auto resultContentBlock = resultData.getContent();
                                        resultContentBlock.parse();
-                                       auto sigBlock = resultContentBlock.get(ndn::tlv::SignatureValue);
-                                       sigBlock.parse();
+                                       auto code = readString(resultContentBlock.get(tlv::Status));
+                                       std::cout << code << std::endl;
+                                       auto sigBlock = resultContentBlock.get(tlv::BLSSigValue);
                                        fetchedSignatures->emplace_back(Buffer(sigBlock.value(), sigBlock.value_size()));
                                        if (fetchedSignatures->size() == fetchCount) {
                                          // all signatures have been fetched
@@ -180,17 +181,6 @@ MPSInitiator::multiPartySign(const Data& unsignedData, const MultipartySchema& s
         std::bind(&onTimeout, _1));
   }
 }
-
-void
-MPSInitiator::onParameterFetch(const Interest& interest)
-{
-}
-
-// void
-// MPSInitiator::fetchResult(const Name& resultName, std::map<Name, Buffer>& fetchedSignatures)
-// {
-
-// }
 
 }  // namespace mps
 }  // namespace ndn
