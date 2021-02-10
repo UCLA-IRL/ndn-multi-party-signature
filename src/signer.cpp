@@ -4,6 +4,8 @@
 #include <ndn-cxx/util/random.hpp>
 #include <utility>
 
+#include <iostream>
+
 namespace ndn {
 namespace mps {
 
@@ -61,26 +63,26 @@ BLSSigner::setSignatureVerifyCallback(const function<bool(const Interest&)>& fun
 void
 BLSSigner::onSignRequest(const Interest& interest)
 {
-  if (!m_interestVerifyCallback || !m_interestVerifyCallback(interest)) {
+  std::cout << "\n\nSigner: On sign request Interest: " << interest.getName().toUri() << std::endl;
+
+  if (!m_interestVerifyCallback || !m_interestVerifyCallback(interest) || !interest.isParametersDigestValid()) {
     m_face.put(generateAck(interest.getName(), ReplyCode::Unauthorized, 0));
+    // bad request, let it timeout
     return;
   }
   // parse
   const auto& paramBlock = interest.getApplicationParameters();
   paramBlock.parse();
-  Name wrapperName;
+  Name parameterDataName;
   try {
     if (paramBlock.get(tlv::ParameterDataName).isValid()) {
-      wrapperName.wireDecode(paramBlock.get(tlv::ParameterDataName).blockFromValue());
-      if (!wrapperName.at(-1).isImplicitSha256Digest()) {
-        NDN_THROW(std::runtime_error("digest not found for data"));
-      }
+      parameterDataName.wireDecode(paramBlock.get(tlv::ParameterDataName).blockFromValue());
     }
     else {
       NDN_THROW(std::runtime_error("Block Element not found or Bad element type in signer's request"));
     }
     if (!interest.getName().get(m_prefix.size() + 2).isParametersSha256Digest()) {
-      NDN_THROW(std::runtime_error("interest not end with parameter digest."));
+      NDN_THROW(std::runtime_error("Interest not end with parameter digest."));
     }
   }
   catch (const std::exception& e) {
@@ -97,13 +99,17 @@ BLSSigner::onSignRequest(const Interest& interest)
   m_face.put(generateAck(interest.getName(), ReplyCode::Processing, randomId));
 
   // fetch parameter
-  Interest fetchInterest(wrapperName);
-  fetchInterest.setCanBePrefix(false);
+  Interest fetchInterest(parameterDataName);
+  fetchInterest.setCanBePrefix(true);
   fetchInterest.setMustBeFresh(true);
   fetchInterest.setInterestLifetime(TIMEOUT);
+  std::cout << "\n\nSigner: send Interest to fetch parameter: " << parameterDataName.toUri() << std::endl;
   m_face.expressInterest(
       fetchInterest,
       [&](auto& interest, auto& data) {
+        std::cout << "\n\nSigner: fetched parameter Data packet." << std::endl;
+        std::cout << data;
+
         // parse fetched data
         ReplyCode code = ReplyCode::OK;
         Data unsignedData;
@@ -137,8 +143,10 @@ BLSSigner::onSignRequest(const Interest& interest)
 void
 BLSSigner::onResultFetch(const Interest& interest)
 {
+  std::cout << "\n\nSigner: received result fetch Interest: " << interest.getName().toUri() << std::endl;
   // parse request
-  if (interest.getName().size() != m_prefix.size() + 3) {
+  // /signer/mps/result/randomness/version/hash
+  if (interest.getName().size() != m_prefix.size() + 5) {
     NDN_LOG_ERROR("Bad result request name format");
     // bad request let it timeout
     return;
@@ -186,7 +194,7 @@ BLSSigner::generateAck(const Name& interestName, ReplyCode code, uint64_t reques
   if (code == ReplyCode::Processing) {
     contentBlock.push_back(makeNonNegativeIntegerBlock(tlv::ResultAfter, ESTIMATE_PROCESS_TIME.count()));
     Name newResultName = m_prefix;
-    newResultName.append("mps").append("result").appendNumber(requestId);
+    newResultName.append("mps").append("result").appendNumber(requestId).appendVersion(0);
     contentBlock.push_back(makeNestedBlock(tlv::ResultName, newResultName));
   }
   contentBlock.encode();

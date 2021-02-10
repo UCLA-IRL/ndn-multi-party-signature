@@ -6,10 +6,11 @@
 #include <tuple>
 #include <ndn-cxx/face.hpp>
 #include <ndn-cxx/util/scheduler.hpp>
+#include <ndn-cxx/security/interest-signer.hpp>
 
-#include "ndnmps/bls-helpers.hpp"
-#include "ndnmps/mps-signer-list.hpp"
-#include "ndnmps/schema.hpp"
+#include "bls-helpers.hpp"
+#include "mps-signer-list.hpp"
+#include "schema.hpp"
 
 namespace ndn {
 namespace mps {
@@ -23,11 +24,14 @@ typedef function<void(const std::string& reason)> SignatureFailureCallback;
  */
 class MPSInitiator {
 private:
-  const Name m_prefix;
   KeyChain& m_keyChain;
   Face& m_face;
   Scheduler& m_scheduler;
-  MultipartySchemaContainer m_schemas;
+  security::InterestSigner m_interestSigner;
+
+public:
+  const Name m_prefix;
+  MultipartySchemaContainer m_schemaContainer;
 
 public:
   MPSInitiator(const Name& prefix, KeyChain& keyChain, Face& face, Scheduler& scheduler);
@@ -40,7 +44,7 @@ public:
    * @param failureCb the callback then the data failed to be signed. the reason will be returned.
    */
   void
-  multiPartySign(const Data& unsignedData, const MultipartySchema& schema, const Name& interestSigningKeyName,
+  multiPartySign(const Data& unsignedData, const MultipartySchema& schema, const Name& signingKeyName,
                  const SignatureFinishCallback& successCb, const SignatureFailureCallback& failureCb);
 
 private:

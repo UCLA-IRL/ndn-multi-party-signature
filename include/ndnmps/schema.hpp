@@ -95,7 +95,7 @@ class MultipartySchemaContainer
 {
 public:
   std::list<MultipartySchema> m_schemas;
-  std::map<Name, BLSPublicKey> m_trustedIds;
+  std::map<Name, BLSPublicKey> m_trustedIds; // keyName, keyBits
 
 public:
   void

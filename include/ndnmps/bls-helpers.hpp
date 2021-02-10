@@ -1,7 +1,7 @@
 #ifndef NDNMPS_SRC_BLS_HELPER_HPP
 #define NDNMPS_SRC_BLS_HELPER_HPP
 
-#include "ndnmps/common.hpp"
+#include "common.hpp"
 
 #define BLS_ETH
 #include <bls/bls384_256.h>

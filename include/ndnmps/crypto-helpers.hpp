@@ -21,7 +21,7 @@
 #ifndef NDNMPS_CRYPTO_HELPERS_HPP
 #define NDNMPS_CRYPTO_HELPERS_HPP
 
-#include "ndnmps/common.hpp"
+#include "common.hpp"
 #include <openssl/evp.h>
 
 namespace ndn {

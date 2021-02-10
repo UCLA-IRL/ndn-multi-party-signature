@@ -4,7 +4,7 @@
 #include <ndn-cxx/name.hpp>
 #include <set>
 
-#include "ndnmps/common.hpp"
+#include "common.hpp"
 
 namespace ndn {
 namespace mps {
