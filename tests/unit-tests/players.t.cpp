@@ -4,6 +4,7 @@
 #include "ndnmps/verifier.hpp"
 #include "ndnmps/initiator.hpp"
 #include "test-common.hpp"
+#include "identity-management-fixture.hpp"
 
 namespace ndn {
 namespace mps {
@@ -11,9 +12,10 @@ namespace tests {
 
 BOOST_FIXTURE_TEST_SUITE(TestPlayers, IdentityManagementTimeFixture)
 
-BOOST_AUTO_TEST_CASE(InitiatorAndSigner)
+BOOST_AUTO_TEST_CASE(SingleSigner)
 {
-  util::DummyClientFace face(io, m_keyChain, {true, true});
+  std::cout << "1" << std::endl;
+  util::DummyClientFace face(io, m_keyChain, { true, true });
 
   // signer
   BLSSigner signer(Name("/signer"), face, Name("/signer/KEY/123"));
@@ -47,6 +49,60 @@ BOOST_AUTO_TEST_CASE(InitiatorAndSigner)
     BOOST_CHECK(true);
   },
   [](const auto& reason) {
+    BOOST_CHECK(false);
+  });
+  advanceClocks(time::milliseconds(20), 10);
+  advanceClocks(time::seconds(1), 1);
+}
+
+BOOST_AUTO_TEST_CASE(MultipleSigner)
+{
+  util::DummyClientFace face(io, m_keyChain, { true, true });
+
+  // signer
+  std::vector<BLSSigner> signers;
+  for (size_t i = 1; i < 6; i++) {
+    std::string prefixStr = "/signer" + std::to_string(i);
+    BLSSigner signer(Name(prefixStr), face, Name(prefixStr + "/KEY/123"));
+    signer.setDataVerifyCallback([](auto) { return true; });
+    signer.setSignatureVerifyCallback([](auto) { return true; });
+    advanceClocks(time::milliseconds(20), 10);
+    signers.push_back(std::move(signer));
+  }
+
+  // initiator
+  auto initiatorId = addIdentity("initiator");
+  Scheduler scheduler(io);
+  MPSInitiator initiator(Name("/initiator"), m_keyChain, face, scheduler);
+  for (size_t i = 0; i < 5; i++) {
+    initiator.m_schemaContainer.m_trustedIds.emplace(signers[i].getPublicKeyName(), signers[i].getPublicKey());
+  }
+  advanceClocks(time::milliseconds(20), 10);
+
+  // schema
+  MultipartySchema schema;
+  schema.m_pktName = WildCardName("/a/b/_");
+  schema.m_ruleId = "01";
+  schema.m_signers.emplace_back(Name("/signer1/KEY/123"));
+  schema.m_signers.emplace_back(Name("/signer2/KEY/123"));
+  schema.m_minOptionalSigners = 2;
+  schema.m_optionalSigners.emplace_back(Name("/signer3/KEY/123"));
+  schema.m_optionalSigners.emplace_back(Name("/signer4/KEY/123"));
+  schema.m_optionalSigners.emplace_back(Name("/signer5/KEY/123"));
+  initiator.m_schemaContainer.m_schemas.push_back(schema);
+
+  // data to sign
+  Data unsignedData;
+  unsignedData.setName(Name("/a/b/c"));
+  unsignedData.setContent(Name("/1/2/3/4").wireEncode());
+
+  // start protocol
+  initiator.multiPartySign(unsignedData, schema, initiatorId.getDefaultKey().getName(),
+  [](const auto& signedData, const auto& infoData) {
+    BOOST_CHECK(true);
+  },
+  [](const auto& reason) {
+    std::cout << reason << std::endl;
     BOOST_CHECK(false);
   });
   advanceClocks(time::milliseconds(20), 10);

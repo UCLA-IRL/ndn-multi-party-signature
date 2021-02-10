@@ -4,6 +4,7 @@
 #include "common.hpp"
 
 #define BLS_ETH
+
 #include <bls/bls384_256.h>
 #include <bls/bls.hpp>
 
@@ -95,7 +96,7 @@ ndnBLSSign(const BLSSecretKey& signingKey, Interest& interest, const SignatureIn
  */
 security::Certificate
 ndnGenBLSSelfCert(const BLSPublicKey& pubKey, const BLSSecretKey& signingKey,
-                         const security::ValidityPeriod& period);
+                  const security::ValidityPeriod& period);
 
 bool
 ndnBLSVerify(const BLSPublicKey& pubKey, const Data& data);

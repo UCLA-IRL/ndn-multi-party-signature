@@ -102,7 +102,8 @@ void
 ndnBLSSign(const BLSSecretKey& signingKey, Interest& interest, const SignatureInfo& sigInfo)
 {
   if (sigInfo.getSignatureType() != tlv::SignatureSha256WithBls) {
-    NDN_THROW(std::runtime_error("Bad signature type from signature info " + std::to_string(sigInfo.getSignatureType())));
+    NDN_THROW(std::runtime_error(
+                      "Bad signature type from signature info " + std::to_string(sigInfo.getSignatureType())));
   }
   interest.setSignatureInfo(sigInfo);
   auto sigValue = std::make_shared<Buffer>(ndnGenBLSSignature(signingKey, interest));

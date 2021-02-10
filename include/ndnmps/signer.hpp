@@ -75,6 +75,11 @@ public:
     return m_pk;
   }
 
+  const Name
+  getPublicKeyName() {
+    return m_keyName;
+  }
+
 private:
   void
   onSignRequest(const Interest&);
