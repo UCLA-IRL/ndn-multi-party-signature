@@ -32,7 +32,7 @@ public:
 
     boost::filesystem::create_directories(dir);
     std::ofstream clientConf((dir / ".ndn" / "client.conf").c_str());
-    clientConf << "pib=pib-sqlite3" << std::endl
+    clientConf << "pib=pib-memory" << std::endl
                << "tpm=tpm-file" << std::endl;
   }
 

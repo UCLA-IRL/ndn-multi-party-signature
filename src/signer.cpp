@@ -27,6 +27,7 @@ BLSSigner::BLSSigner(const Name& prefix, Face& face, const Name& keyName)
     , m_face(face)
 {
   // generate default key randomly
+  ndnBLSInit();
   m_sk.init();
   m_sk.getPublicKey(m_pk);
 

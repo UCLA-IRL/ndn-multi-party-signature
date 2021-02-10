@@ -14,7 +14,6 @@ BOOST_FIXTURE_TEST_SUITE(TestPlayers, IdentityManagementTimeFixture)
 
 BOOST_AUTO_TEST_CASE(SingleSigner)
 {
-  std::cout << "1" << std::endl;
   util::DummyClientFace face(io, m_keyChain, { true, true });
 
   // signer
