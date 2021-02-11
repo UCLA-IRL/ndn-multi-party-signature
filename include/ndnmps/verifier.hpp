@@ -22,8 +22,10 @@ typedef function<void(bool)> VerifyFinishCallback;
 class BLSVerifier {
 private:
   Face& m_face;
+
+public:
   // known schemas and identities
-  MultipartySchemaContainer m_schemas;
+  MultipartySchemaContainer m_schemaContainer;
 
 public:
   /**

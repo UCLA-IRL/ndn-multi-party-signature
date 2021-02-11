@@ -12,15 +12,17 @@ namespace mps {
 NDN_LOG_INIT(ndnmps.mpsinitiator);
 
 void
-onNack(const Interest& interest, const lp::Nack& nack)
+onNack(const Interest& interest, const lp::Nack& nack, const SignatureFailureCallback& failureCb)
 {
   NDN_LOG_ERROR("Received NACK with reason " << nack.getReason() << " for " << interest.getName());
+  failureCb("Received NACK with reason " + std::to_string(static_cast<int>(nack.getReason())) + " for " + interest.getName().toUri());
 }
 
 void
-onTimeout(const Interest& interest)
+onTimeout(const Interest& interest, const SignatureFailureCallback& failureCb)
 {
   NDN_LOG_ERROR("interest time out for " << interest.getName());
+  failureCb("interest time out for " + interest.getName().toUri());
 }
 
 MPSInitiator::MPSInitiator(const Name& prefix, KeyChain& keyChain, Face& face, Scheduler& scheduler)
@@ -81,6 +83,7 @@ MPSInitiator::multiPartySign(const Data& unsignedData, const MultipartySchema& s
                 [](const Name& prefix, const std::string& reason) {
                   NDN_LOG_ERROR("Fail to register prefix " << prefix.toUri() << " because " << reason);
                 });
+    // TODO: schedule an event for failure callback
 
     // send Interest
     Interest signRequestInt;
@@ -99,8 +102,10 @@ MPSInitiator::multiPartySign(const Data& unsignedData, const MultipartySchema& s
     m_face.expressInterest(
         signRequestInt,
         // [keyLocatorName, signers, unfinishedData, paraDataPromise, paraData, fetchedSignatures, fetchCount, finalized, handler, this, &successCb, &failureCb, &signingKeyName](const auto&, const auto& ackData) mutable {  // after fetching the ACK data
-        [=, &successCb, &failureCb, &signingKeyName] (const auto&, const auto& ackData) {  // after fetching the ACK data
-          std::cout << "\n\nInitiator: Fetched ACK Data from signer: " << ackData.getName().getPrefix(-4).toUri() << std::endl;
+        [=, &successCb, &failureCb, &signingKeyName] (const auto&, const auto& ackData) {
+          // after fetching the ACK data
+          // ack data: /signer/mps/sign/hash
+          std::cout << "\n\nInitiator: Fetched ACK Data from signer: " << ackData.getName().getPrefix(-3).toUri() << std::endl;
           std::cout << ackData;
 
           // parse ack content
@@ -137,7 +142,7 @@ MPSInitiator::multiPartySign(const Data& unsignedData, const MultipartySchema& s
                                      resultFetchInt,
                                      // [keyLocatorName, signers, unfinishedData, fetchedSignatures, fetchCount, finalized, this, &successCb, &failureCb, &signingKeyName](const auto&, const auto& resultData) {
                                        [=, &successCb, &failureCb, &signingKeyName](const auto&, const auto& resultData) {
-                                       auto signerPrefix = resultData.getName().getPrefix(-4);
+                                       auto signerPrefix = resultData.getName().getPrefix(-5);
 
                                        std::cout << "\n\nInitiator: Fetched result Data from signer: " << signerPrefix.toUri() << std::endl;
                                        std::cout << resultData;
@@ -145,31 +150,39 @@ MPSInitiator::multiPartySign(const Data& unsignedData, const MultipartySchema& s
                                        auto resultContentBlock = resultData.getContent();
                                        resultContentBlock.parse();
                                        auto code = readString(resultContentBlock.get(tlv::Status));
-                                       std::cout << code << std::endl;
-                                       auto sigBlock = resultContentBlock.get(tlv::BLSSigValue);
-                                       fetchedSignatures->emplace_back(Buffer(sigBlock.value(), sigBlock.value_size()));
-                                       if (fetchedSignatures->size() == fetchCount) {
-                                         // all signatures have been fetched
-                                         auto aggSignature = std::make_shared<Buffer>(ndnBLSAggregateSignature(*fetchedSignatures));
-                                         unfinishedData->setSignatureValue(aggSignature);
-                                         unfinishedData->wireEncode();
+                                       if (code == "200") {
+                                         auto sigBlock = resultContentBlock.get(tlv::BLSSigValue);
+                                         fetchedSignatures->emplace_back(Buffer(sigBlock.value(), sigBlock.value_size()));
+                                         if (fetchedSignatures->size() == fetchCount) {
+                                           // all signatures have been fetched
+                                           auto aggSignature = std::make_shared<Buffer>(ndnBLSAggregateSignature(*fetchedSignatures));
+                                           unfinishedData->setSignatureValue(aggSignature);
+                                           unfinishedData->wireEncode();
 
-                                         // prepare the signature info packet
-                                         Data sigInfoData;
-                                         sigInfoData.setName(keyLocatorName);
-                                         sigInfoData.setContent(signers->wireEncode());
-                                         m_keyChain.sign(sigInfoData, signingByKey(signingKeyName));
+                                           // prepare the signature info packet
+                                           Data sigInfoData;
+                                           sigInfoData.setName(keyLocatorName);
+                                           sigInfoData.setContent(signers->wireEncode());
+                                           m_keyChain.sign(sigInfoData, signingByKey(signingKeyName));
+                                           std::cout << "Initiator: info packet is ready" << std::endl;
 
-                                         // end the multiparty signature
-                                         successCb(*unfinishedData, sigInfoData);
+                                           // end the multiparty signature
+                                           successCb(*unfinishedData, sigInfoData);
+                                         }
+                                       }
+                                       else if (code != "102") {
+                                         failureCb("Failure fetching signature value from the signer " + signerPrefix.toUri());
+                                       }
+                                       else {
+                                         // processing
                                        }
                                      },
-                                     std::bind(&onNack, _1, _2),
-                                     std::bind(&onTimeout, _1));
+                                     std::bind(&onNack, _1, _2, failureCb),
+                                     std::bind(&onTimeout, _1, failureCb));
                                });
         },
-        std::bind(&onNack, _1, _2),
-        std::bind(&onTimeout, _1));
+        std::bind(&onNack, _1, _2, failureCb),
+        std::bind(&onTimeout, _1, failureCb));
   }
 }
 

@@ -43,38 +43,44 @@ BOOST_AUTO_TEST_CASE(SingleSigner)
   unsignedData.setContent(Name("/1/2/3/4").wireEncode());
 
   // start protocol
+  bool succeed = false;
   initiator.multiPartySign(unsignedData, schema, initiatorId.getDefaultKey().getName(),
-  [](const auto& signedData, const auto& infoData) {
-    BOOST_CHECK(true);
-  },
-  [](const auto& reason) {
-    BOOST_CHECK(false);
-  });
-  advanceClocks(time::milliseconds(20), 10);
-  advanceClocks(time::seconds(1), 1);
+                            [&](const auto& signedData, const auto& infoData) {
+                              std::cout << "success callback called." << std::endl;
+                              succeed = true;
+                              BLSVerifier verifier(face);
+                              BOOST_CHECK(!verifier.verify(signedData, infoData));
+                              verifier.m_schemaContainer.m_schemas.push_back(schema);
+                              verifier.m_schemaContainer.m_trustedIds.emplace(Name("/signer/KEY/123"), signer.getPublicKey());
+                              BOOST_CHECK(verifier.verify(signedData, infoData));
+                            },
+                            [](const auto& reason) {
+                              BOOST_CHECK(false);
+                            });
+  advanceClocks(time::milliseconds(200), 10);
+  BOOST_CHECK(succeed);
 }
 
 BOOST_AUTO_TEST_CASE(MultipleSigner)
 {
   util::DummyClientFace face(io, m_keyChain, { true, true });
 
-  // signer
-  std::vector<BLSSigner> signers;
-  for (size_t i = 1; i < 6; i++) {
-    std::string prefixStr = "/signer" + std::to_string(i);
-    BLSSigner signer(Name(prefixStr), face, Name(prefixStr + "/KEY/123"));
-    signer.setDataVerifyCallback([](auto) { return true; });
-    signer.setSignatureVerifyCallback([](auto) { return true; });
-    advanceClocks(time::milliseconds(20), 10);
-    signers.push_back(std::move(signer));
+  // signers
+  std::vector<std::unique_ptr<BLSSigner>> signers;
+  for (size_t i = 0; i < 5; i++) {
+    std::string prefix = "/signer" + std::to_string(i + 1);
+    signers.emplace_back(std::make_unique<BLSSigner>(Name(prefix), face, Name(prefix + "/KEY/123")));
+    signers[i]->setDataVerifyCallback([](auto) { return true; });
+    signers[i]->setSignatureVerifyCallback([](auto) { return true; });
   }
+  advanceClocks(time::milliseconds(20), 10);
 
   // initiator
   auto initiatorId = addIdentity("initiator");
   Scheduler scheduler(io);
   MPSInitiator initiator(Name("/initiator"), m_keyChain, face, scheduler);
   for (size_t i = 0; i < 5; i++) {
-    initiator.m_schemaContainer.m_trustedIds.emplace(signers[i].getPublicKeyName(), signers[i].getPublicKey());
+    initiator.m_schemaContainer.m_trustedIds.emplace(signers[i]->getPublicKeyName(), signers[i]->getPublicKey());
   }
   advanceClocks(time::milliseconds(20), 10);
 
@@ -96,16 +102,27 @@ BOOST_AUTO_TEST_CASE(MultipleSigner)
   unsignedData.setContent(Name("/1/2/3/4").wireEncode());
 
   // start protocol
+  bool succeed = false;
   initiator.multiPartySign(unsignedData, schema, initiatorId.getDefaultKey().getName(),
-  [](const auto& signedData, const auto& infoData) {
-    BOOST_CHECK(true);
-  },
-  [](const auto& reason) {
-    std::cout << reason << std::endl;
-    BOOST_CHECK(false);
-  });
+                          [&](const auto& signedData, const auto& infoData) {
+                            succeed = true;
+                            BLSVerifier verifier(face);
+                            BOOST_CHECK(!verifier.verify(signedData, infoData));
+                            verifier.m_schemaContainer.m_schemas.push_back(schema);
+                            for (size_t i = 0; i < 5; i++) {
+                              verifier.m_schemaContainer.m_trustedIds.emplace(signers[i]->getPublicKeyName(), signers[i]->getPublicKey());
+                            }
+                            BOOST_CHECK(verifier.verify(signedData, infoData));
+                          },
+                          [](const auto& reason) {
+                            std::cout << reason << std::endl;
+                            BOOST_CHECK(false);
+                          });
   advanceClocks(time::milliseconds(20), 10);
   advanceClocks(time::seconds(1), 1);
+  advanceClocks(time::seconds(1), 1);
+  advanceClocks(time::seconds(1), 1);
+  BOOST_CHECK(succeed);
 }
 
 // BOOST_AUTO_TEST_CASE(VerifierFetch)

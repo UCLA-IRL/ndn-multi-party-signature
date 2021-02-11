@@ -22,27 +22,30 @@ BLSVerifier::verify(const Data& data, const Data& signatureInfoData)
   try {
     auto keyLocatorName = data.getSignatureInfo().getKeyLocator().getName();
     if (!keyLocatorName.isPrefixOf(signatureInfoData.getName())) {
+      NDN_LOG_INFO("key locator name does not match signature info data");
       return false;
     }
   }
   catch (const std::exception& e) {
+    NDN_LOG_INFO("key locator is not a name or does not exist");
     return false;
   }
 
   // check signer list
   MpsSignerList signerList;
-  const auto& signerListBlock = data.getContent();
+  const auto& signerListBlock = signatureInfoData.getContent();
   signerListBlock.parse();
   if (signerListBlock.get(tlv::MpsSignerList).isValid()) {
     signerList.wireDecode(signerListBlock.get(tlv::MpsSignerList));
   }
-  // TODO: add trust anchors into m_schemas
-  if (!m_schemas.passSchema(data.getName(), signerList)) {
+  if (!m_schemaContainer.passSchema(data.getName(), signerList)) {
+    NDN_LOG_INFO("signer list cannot pass the schema");
     return false;
   }
 
   // verify signature
-  auto aggKey = m_schemas.aggregateKey(signerList);
+  BLSPublicKey aggKey;
+  aggKey = m_schemaContainer.aggregateKey(signerList);
   return ndnBLSVerify(aggKey, data);
 }
 

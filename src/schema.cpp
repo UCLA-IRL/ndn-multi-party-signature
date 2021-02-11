@@ -191,6 +191,11 @@ MultipartySchema::passSchema(const MpsSignerList& signers) const
 bool
 MultipartySchemaContainer::passSchema(const Name& packetName, const MpsSignerList& signers) const
 {
+  for (const auto& item : signers.m_signers) {
+    if (m_trustedIds.count(item) == 0) {
+      return false;
+    }
+  }
   for (const auto& schema : m_schemas) {
     if (schema.match(packetName)) {
       return schema.passSchema(signers);
