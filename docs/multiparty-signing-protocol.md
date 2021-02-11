@@ -46,6 +46,7 @@ To perform a successful multiparty signature signing process:
 * A `S` can verify `I`'s request. This requires `S` can verify `I`'s identity, e.g., by installing its certificate in advance.
 * `I` can verifie each `S`'s replied data. This requires `I` can verify each `S`'s identity, e.g., by installing each `S`'s certificate in advance.
 * A `V` can verify the aggregated signature. This requires `V` can verify each involved signer's identity, e.g., by installing each `S`'s certificate in advance.
+* Importantly, to prevent BLS Rogue Key Attack, each public key should be with a proof of possession when being installed by verifiers.
 
 This library does not make assumptions on (i) how signers' certificates are installed to the initiator or verifier, (ii) how verifier knows and fetches the signed packet,  (iii) how verifier obtains the schema to decide whether a packet is trusted or not.
 
