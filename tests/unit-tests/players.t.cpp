@@ -29,6 +29,9 @@ BOOST_AUTO_TEST_CASE(SingleSigner)
   initiator.m_schemaContainer.m_trustedIds.emplace(Name("/signer/KEY/123"), signer.getPublicKey());
   advanceClocks(time::milliseconds(20), 10);
 
+  // verifier
+  BLSVerifier verifier(face);
+
   // schema
   MultipartySchema schema;
   schema.m_pktName = WildCardName("/a/b/_");
@@ -43,22 +46,23 @@ BOOST_AUTO_TEST_CASE(SingleSigner)
   unsignedData.setContent(Name("/1/2/3/4").wireEncode());
 
   // start protocol
-  bool succeed = false;
+  bool callbackInvoked = false;
+  Data signedData, infoData;
   initiator.multiPartySign(unsignedData, schema, initiatorId.getDefaultKey().getName(),
-                            [&](const auto& signedData, const auto& infoData) {
-                              std::cout << "success callback called." << std::endl;
-                              succeed = true;
-                              BLSVerifier verifier(face);
-                              BOOST_CHECK(!verifier.verify(signedData, infoData));
-                              verifier.m_schemaContainer.m_schemas.push_back(schema);
-                              verifier.m_schemaContainer.m_trustedIds.emplace(Name("/signer/KEY/123"), signer.getPublicKey());
-                              BOOST_CHECK(verifier.verify(signedData, infoData));
+                            [&](const auto& d1, const auto& d2) {
+                              callbackInvoked = true;
+                              signedData = d1;
+                              infoData = d2;
                             },
                             [](const auto& reason) {
                               BOOST_CHECK(false);
                             });
   advanceClocks(time::milliseconds(200), 10);
-  BOOST_CHECK(succeed);
+  BOOST_CHECK(callbackInvoked);
+  BOOST_CHECK(!verifier.verify(signedData, infoData));
+  verifier.m_schemaContainer.m_schemas.push_back(schema);
+  verifier.m_schemaContainer.m_trustedIds.emplace(Name("/signer/KEY/123"), signer.getPublicKey());
+  BOOST_CHECK(verifier.verify(signedData, infoData));
 }
 
 BOOST_AUTO_TEST_CASE(MultipleSigner)
@@ -84,6 +88,9 @@ BOOST_AUTO_TEST_CASE(MultipleSigner)
   }
   advanceClocks(time::milliseconds(20), 10);
 
+  // verifier
+  BLSVerifier verifier(face);
+
   // schema
   MultipartySchema schema;
   schema.m_pktName = WildCardName("/a/b/_");
@@ -102,27 +109,26 @@ BOOST_AUTO_TEST_CASE(MultipleSigner)
   unsignedData.setContent(Name("/1/2/3/4").wireEncode());
 
   // start protocol
-  bool succeed = false;
+  bool callbackInvoked = false;
+  Data signedData, infoData;
   initiator.multiPartySign(unsignedData, schema, initiatorId.getDefaultKey().getName(),
-                          [&](const auto& signedData, const auto& infoData) {
-                            succeed = true;
-                            BLSVerifier verifier(face);
-                            BOOST_CHECK(!verifier.verify(signedData, infoData));
-                            verifier.m_schemaContainer.m_schemas.push_back(schema);
-                            for (size_t i = 0; i < 5; i++) {
-                              verifier.m_schemaContainer.m_trustedIds.emplace(signers[i]->getPublicKeyName(), signers[i]->getPublicKey());
-                            }
-                            BOOST_CHECK(verifier.verify(signedData, infoData));
+                          [&](const auto& d1, const auto& d2) {
+                            callbackInvoked = true;
+                            signedData = d1;
+                            infoData = d2;
                           },
                           [](const auto& reason) {
                             std::cout << reason << std::endl;
                             BOOST_CHECK(false);
                           });
-  advanceClocks(time::milliseconds(20), 10);
-  advanceClocks(time::seconds(1), 1);
-  advanceClocks(time::seconds(1), 1);
-  advanceClocks(time::seconds(1), 1);
-  BOOST_CHECK(succeed);
+  advanceClocks(time::milliseconds(200), 10);
+  BOOST_CHECK(callbackInvoked);
+  BOOST_CHECK(!verifier.verify(signedData, infoData));
+  verifier.m_schemaContainer.m_schemas.push_back(schema);
+  for (size_t i = 0; i < 5; i++) {
+    verifier.m_schemaContainer.m_trustedIds.emplace(signers[i]->getPublicKeyName(), signers[i]->getPublicKey());
+  }
+  BOOST_CHECK(verifier.verify(signedData, infoData));
 }
 
 // BOOST_AUTO_TEST_CASE(VerifierFetch)
