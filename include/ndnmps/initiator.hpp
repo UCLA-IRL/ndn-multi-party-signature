@@ -46,6 +46,10 @@ public:
   void
   multiPartySign(const Data& unsignedData, const MultipartySchema& schema, const Name& signingKeyName,
                  const SignatureFinishCallback& successCb, const SignatureFailureCallback& failureCb);
+
+private:
+  void
+  performRPC(const Name& signerKeyName, std::shared_ptr<Data> unfinishedData);
 };
 
 }  // namespace mps
