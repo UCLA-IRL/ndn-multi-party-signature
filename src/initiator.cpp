@@ -33,6 +33,27 @@ MPSInitiator::MPSInitiator(const Name& prefix, KeyChain& keyChain, Face& face, S
     , m_interestSigner(m_keyChain)
 {}
 
+struct SignRequestState {
+  int a;
+};
+
+std::tuple<std::shared_ptr<Data>, std::shared_ptr<Data>>
+prepareUnfinishedDataAndInfoData(const Data& unsignedData, const Name& initiatorPrefix)
+{
+  auto keyLocatorRandomness = random::generateSecureWord64();
+  Name keyLocatorName = initiatorPrefix;
+  keyLocatorName.append("mps").appendNumber(keyLocatorRandomness);
+
+  auto unfinishedData = std::make_shared<Data>(unsignedData);
+  unfinishedData->setSignatureInfo(
+          SignatureInfo(static_cast<ndn::tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
+                        KeyLocator(keyLocatorName)));
+  unfinishedData->setSignatureValue(make_shared<Buffer>());  // placeholder sig value for wireEncode
+
+  auto sigInfoData = std::make_shared<Data>(keyLocatorName);
+  return std::make_tuple(unfinishedData, sigInfoData);
+}
+
 void
 MPSInitiator::multiPartySign(const Data& unsignedData, const MultipartySchema& schema, const Name& signingKeyName,
                              const SignatureFinishCallback& successCb, const SignatureFailureCallback& failureCb)
@@ -43,20 +64,12 @@ MPSInitiator::multiPartySign(const Data& unsignedData, const MultipartySchema& s
     failureCb("Not sufficient number of known signers.");
   }
 
-  // prepare unsigned packet
-  auto keyLocatorRandomness = random::generateSecureWord64();
-  Name keyLocatorName = m_prefix;
-  keyLocatorName.append("mps").appendNumber(keyLocatorRandomness);
-
-  auto unfinishedData = std::make_shared<Data>(unsignedData);
-  unfinishedData->setSignatureInfo(
-      SignatureInfo(static_cast<ndn::tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
-                    KeyLocator(keyLocatorName)));
-  unfinishedData->setSignatureValue(make_shared<Buffer>());  // placeholder sig value for wireEncode
+  // prepare unsigned packet and signature info packet
+  std::shared_ptr<Data> unfinishedData, sigInfoData;
+  std::tie(unfinishedData, sigInfoData) = prepareUnfinishedDataAndInfoData(unsignedData, m_prefix);
 
   // prepare cache for parameter packets and fetched signatures
   auto fetchedSignatures = std::make_shared<std::vector<Buffer>>();  // signer prefix, signature buffer
-  const size_t fetchCount = signers->m_signers.size();
   auto finalized = std::make_shared<bool>(false);
 
   for (const Name& signer : signers->m_signers) {
@@ -101,7 +114,7 @@ MPSInitiator::multiPartySign(const Data& unsignedData, const MultipartySchema& s
     std::cout << "\n\nInitiator: Send MPS Sign Interest to signer: " << signer.getPrefix(-2).toUri() << std::endl;
     m_face.expressInterest(
         signRequestInt,
-        // [keyLocatorName, signers, unfinishedData, paraDataPromise, paraData, fetchedSignatures, fetchCount, finalized, handler, this, &successCb, &failureCb, &signingKeyName](const auto&, const auto& ackData) mutable {  // after fetching the ACK data
+        // [sigInfoData, signers, unfinishedData, paraDataPromise, paraData, fetchedSignatures, finalized, handler, this, &successCb, &failureCb, &signingKeyName](const auto&, const auto& ackData) mutable {  // after fetching the ACK data
         [=, &successCb, &failureCb, &signingKeyName] (const auto&, const auto& ackData) {
           // after fetching the ACK data
           // ack data: /signer/mps/sign/hash
@@ -130,7 +143,7 @@ MPSInitiator::multiPartySign(const Data& unsignedData, const MultipartySchema& s
 
           // set the scheduler to fetch the result
           m_scheduler.schedule(result_ms,
-                               // [keyLocatorName, signers, unfinishedData, fetchedSignatures, fetchCount, finalized, resultName, handler, this, &successCb, &failureCb, &signingKeyName]() {
+                               // [sigInfoData, signers, unfinishedData, fetchedSignatures, finalized, resultName, handler, this, &successCb, &failureCb, &signingKeyName]() {
                               [=, &successCb, &failureCb, &signingKeyName]() {
                                  std::cout << "\n\nInitiator: Send Interest for result Data from signer: " << resultName.getPrefix(-4).toUri() << std::endl;
                                  handler.cancel();
@@ -140,7 +153,7 @@ MPSInitiator::multiPartySign(const Data& unsignedData, const MultipartySchema& s
                                  m_interestSigner.makeSignedInterest(resultFetchInt, signingByKey(signingKeyName));
                                  m_face.expressInterest(
                                      resultFetchInt,
-                                     // [keyLocatorName, signers, unfinishedData, fetchedSignatures, fetchCount, finalized, this, &successCb, &failureCb, &signingKeyName](const auto&, const auto& resultData) {
+                                     // [sigInfoData, signers, unfinishedData, fetchedSignatures, finalized, this, &successCb, &failureCb, &signingKeyName](const auto&, const auto& resultData) {
                                        [=, &successCb, &failureCb, &signingKeyName](const auto&, const auto& resultData) {
                                        auto signerPrefix = resultData.getName().getPrefix(-5);
 
@@ -153,21 +166,19 @@ MPSInitiator::multiPartySign(const Data& unsignedData, const MultipartySchema& s
                                        if (code == "200") {
                                          auto sigBlock = resultContentBlock.get(tlv::BLSSigValue);
                                          fetchedSignatures->emplace_back(Buffer(sigBlock.value(), sigBlock.value_size()));
-                                         if (fetchedSignatures->size() == fetchCount) {
+                                         if (fetchedSignatures->size() == signers->m_signers.size()) {
                                            // all signatures have been fetched
                                            auto aggSignature = std::make_shared<Buffer>(ndnBLSAggregateSignature(*fetchedSignatures));
                                            unfinishedData->setSignatureValue(aggSignature);
                                            unfinishedData->wireEncode();
 
                                            // prepare the signature info packet
-                                           Data sigInfoData;
-                                           sigInfoData.setName(keyLocatorName);
-                                           sigInfoData.setContent(signers->wireEncode());
-                                           m_keyChain.sign(sigInfoData, signingByKey(signingKeyName));
+                                           sigInfoData->setContent(signers->wireEncode());
+                                           m_keyChain.sign(*sigInfoData, signingByKey(signingKeyName));
                                            std::cout << "Initiator: info packet is ready" << std::endl;
 
                                            // end the multiparty signature
-                                           successCb(*unfinishedData, sigInfoData);
+                                           successCb(*unfinishedData, *sigInfoData);
                                          }
                                        }
                                        else if (code != "102") {

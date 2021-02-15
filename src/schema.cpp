@@ -208,13 +208,18 @@ MpsSignerList
 MultipartySchemaContainer::getAvailableSigners(const MultipartySchema& schema) const
 {
   std::set<Name> resultSet;
-  for (const auto& item : schema.m_signers) {
-    resultSet.insert(item);
+  for (const auto& pattern : schema.m_signers) {
+    auto matchedKeys = getMatchedKeys(pattern);
+    if (matchedKeys.empty()) {
+      NDN_THROW(std::runtime_error("Schema container does not have sufficient keys. Missing key for " + pattern.toUri()));
+    }
+    resultSet.insert(matchedKeys.front());
   }
   size_t count = 0;
-  for (const auto& item : schema.m_optionalSigners) {
-    if (m_trustedIds.count(item) != 0 && count < schema.m_minOptionalSigners) {
-      resultSet.insert(item);
+  for (const auto& pattern : schema.m_optionalSigners) {
+    auto matchedKeys = getMatchedKeys(pattern);
+    if (!matchedKeys.empty()) {
+      resultSet.insert(matchedKeys.front());
       count++;
     }
     if (count >= schema.m_minOptionalSigners) {
@@ -222,7 +227,7 @@ MultipartySchemaContainer::getAvailableSigners(const MultipartySchema& schema) c
     }
   }
   if (count < schema.m_minOptionalSigners) {
-    return MpsSignerList();
+    NDN_THROW(std::runtime_error("Schema container does not have sufficient keys. Missing optional keys"));
   }
   return MpsSignerList(std::vector<Name>(resultSet.begin(), resultSet.end()));
 }
@@ -247,6 +252,63 @@ MultipartySchemaContainer::aggregateKey(const MpsSignerList& signers) const
     }
   }
   return aggKey;
+}
+
+MpsSignerList
+MultipartySchemaContainer::replaceSigner(const MpsSignerList& signers, const Name& unavailableKey, const MultipartySchema& schema) const
+{
+  std::set<Name> newResultSet(signers.m_signers.begin(), signers.m_signers.end());
+  newResultSet.erase(unavailableKey);
+
+  // find the corresponding required signer schema that matches the unavailable name
+  std::vector<WildCardName> possiblyBrokenPattern;
+  for (const auto& pattern : schema.m_signers) {
+    if (pattern.match(unavailableKey)) {
+      possiblyBrokenPattern.push_back(pattern);
+    }
+  }
+  // find the corresponding optional signer schema that matches the unavailable name
+  for (const auto& pattern : schema.m_optionalSigners) {
+    if (pattern.match(unavailableKey)) {
+      possiblyBrokenPattern.push_back(pattern);
+    }
+  }
+  // find replacement
+  bool findReplacement = false;
+  for (const auto& brokenPattern : possiblyBrokenPattern) {
+    findReplacement = false;
+    for (const auto& existingKey : signers.m_signers) {
+      if (existingKey != unavailableKey && brokenPattern.match(existingKey)) {
+        findReplacement = true;
+        break;
+      }
+    }
+    auto matchedKeys = getMatchedKeys(brokenPattern);
+    for (const auto& matchedKey : matchedKeys) {
+      if (matchedKey != unavailableKey) {
+        newResultSet.insert(matchedKey);
+        findReplacement = true;
+        break;
+      }
+    }
+    if (!findReplacement) {
+      // Schema container does not have sufficient keys that are available
+      return MpsSignerList();
+    }
+  }
+  return MpsSignerList(std::vector<Name>(newResultSet.begin(), newResultSet.end()));
+}
+
+std::vector<Name>
+MultipartySchemaContainer::getMatchedKeys(const WildCardName& pattern) const
+{
+  std::set<Name> resultSet;
+  for (const auto& item : m_trustedIds) {
+    if (pattern.match(item.first)) {
+      resultSet.insert(item.first);
+    }
+  }
+  return std::vector<Name>(resultSet.begin(), resultSet.end());
 }
 
 }  // namespace mps

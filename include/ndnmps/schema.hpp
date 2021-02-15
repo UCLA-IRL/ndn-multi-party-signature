@@ -42,8 +42,8 @@ class MultipartySchema {
 public:
   WildCardName m_pktName; // Data name
   std::string m_ruleId; // rule ID
-  std::vector<WildCardName> m_signers; // required signers
-  std::vector<WildCardName> m_optionalSigners; // optional signers
+  std::vector<WildCardName> m_signers; // required signers, wildcard name
+  std::vector<WildCardName> m_optionalSigners; // optional signers, wildcard name
   size_t m_minOptionalSigners; // min required optional signers
 
 public:
@@ -112,8 +112,27 @@ public:
   MpsSignerList
   getAvailableSigners(const MultipartySchema& schema) const;
 
+  /**
+   * @brief When a signer is unavailable. find a replacement.
+   * @param signers The existing list and will be renewed.
+   * @param unavailableKey The key name of the unavailable signer.
+   * @param schema The schema.
+   * @return nonempty MpsSignerList if there is an available replacement of the unavailable key.
+   */
+  MpsSignerList
+  replaceSigner(const MpsSignerList& signers, const Name& unavailableKey, const MultipartySchema& schema) const;
+
   BLSPublicKey
   aggregateKey(const MpsSignerList& signers) const;
+
+private:
+  /**
+   * @brief Try get a matched key from the truste IDs
+   * @param pattern The wildcard name of the target key name.
+   * @return a name vector if exists. Empty vector if not exists.
+   */
+  std::vector<Name>
+  getMatchedKeys(const WildCardName& pattern) const;
 };
 
 }  // namespace mps
