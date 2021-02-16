@@ -17,6 +17,7 @@ namespace mps {
 
 typedef function<void(const Data& data, const Data& signerListData)> SignatureFinishCallback;
 typedef function<void(const std::string& reason)> SignatureFailureCallback;
+struct MultiSignGlobalState;
 
 /**
  * The signer class class that handles functionality in the multi-signing protocol.
@@ -49,7 +50,9 @@ public:
 
 private:
   void
-  performRPC(const Name& signerKeyName, std::shared_ptr<Data> unfinishedData);
+  performRPC(const Name& signerKeyName, const Name& signingKeyName,
+             const SignatureFinishCallback& successCb, const SignatureFailureCallback& failureCb,
+             std::shared_ptr<MultiSignGlobalState> globalState);
 };
 
 }  // namespace mps

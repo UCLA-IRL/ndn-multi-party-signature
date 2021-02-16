@@ -3,7 +3,7 @@
 #include <ndn-cxx/util/logger.hpp>
 #include <ndn-cxx/util/random.hpp>
 #include <utility>
-
+#include <future>
 #include <iostream>
 
 namespace ndn {
@@ -15,50 +15,114 @@ const time::milliseconds TIMEOUT = time::seconds(4);
 const time::milliseconds ESTIMATE_PROCESS_TIME = time::seconds(1);
 const static Name HMAC_KEY_PREFIX("/ndn/mps/hmac"); // append request ID when being used
 
+struct SignRequestState
+{
+  ECDHState m_ecdh;
+  std::array<uint8_t, 16> m_aesKey;
+  ReplyCode m_code;
+  Buffer m_signatureValue;
+  size_t m_version;
+  RegisteredPrefixHandle m_resultPrefixHandle;
+};
+
+/**
+ * @brief Parse sign request Interest packet's application parameters.
+ */
+void
+parseSignRequestPayload(const Interest& interest, Name& parameterDataName, std::vector<uint8_t>& peerPubKey)
+{
+  const auto& paramBlock = interest.getApplicationParameters();
+  paramBlock.parse();
+  parameterDataName.wireDecode(paramBlock.get(tlv::ParameterDataName).blockFromValue());
+  const auto& ecdhBlock = paramBlock.get(tlv::EcdhPub);
+  peerPubKey.resize(ecdhBlock.value_size());
+  std::memcpy(peerPubKey.data(), ecdhBlock.value(), ecdhBlock.value_size());
+}
+
+/**
+ * @brief Generate unsigned ACK data.
+ */
+Data
+generateSignRequestAck(const Name& interestName, const Name& selfPrefix, ReplyCode code, uint64_t requestId)
+{
+  Data ack(interestName);
+  Block contentBlock(ndn::tlv::Content);
+  contentBlock.push_back(makeStringBlock(tlv::Status, std::to_string(static_cast<int>(ReplyCode::Processing))));
+  if (code == ReplyCode::Processing) {
+    contentBlock.push_back(makeNonNegativeIntegerBlock(tlv::ResultAfter, ESTIMATE_PROCESS_TIME.count()));
+    Name newResultName = selfPrefix;
+    newResultName.append("mps").append("result").appendNumber(requestId).appendVersion(0);
+    contentBlock.push_back(makeNestedBlock(tlv::ResultName, newResultName));
+  }
+  contentBlock.encode();
+  ack.setContent(contentBlock);
+  ack.setFreshnessPeriod(TIMEOUT);
+  return ack;
+}
+
+Data
+generateResultData(const Name& interestName, const Name& resultPrefix, std::shared_ptr<SignRequestState> statePtr)
+{
+  Data result(interestName);
+  Block contentBlock(ndn::tlv::Content);
+  contentBlock.push_back(makeStringBlock(tlv::Status, std::to_string(static_cast<int>(statePtr->m_code))));
+  if (statePtr->m_code == ReplyCode::Processing) {
+    statePtr->m_version += 1;
+    contentBlock.push_back(makeNonNegativeIntegerBlock(tlv::ResultAfter, ESTIMATE_PROCESS_TIME.count()));
+    Name newResultName = resultPrefix;
+    newResultName.appendVersion(statePtr->m_version);
+    contentBlock.push_back(makeNestedBlock(tlv::ResultName, newResultName));
+  }
+  else if (statePtr->m_code == ReplyCode::OK) {
+    contentBlock.push_back(
+      makeBinaryBlock(tlv::BLSSigValue, statePtr->m_signatureValue.data(), statePtr->m_signatureValue.size()));
+    std::cout << "signature value length: " << statePtr->m_signatureValue.size() << std::endl;
+    statePtr->m_resultPrefixHandle.cancel();
+  }
+  else {
+    statePtr->m_resultPrefixHandle.cancel();
+  }
+  contentBlock.encode();
+  result.setContent(contentBlock);
+  result.setFreshnessPeriod(TIMEOUT);
+  return result;
+}
+
 void
 onRegisterFail(const Name& prefix, const std::string& reason)
 {
   NDN_LOG_ERROR("Fail to register prefix " << prefix.toUri() << " because " << reason);
 }
 
-BLSSigner::BLSSigner(const Name& prefix, Face& face, const Name& keyName)
-    : m_prefix(prefix)
+BLSSigner::BLSSigner(const Name& prefix, Face& face,
+                     const Name& keyName,
+                     const VerifyToBeSignedCallback& verifyToBeSignedCallback,
+                     const VerifySignRequestCallback& verifySignRequestCallback)
+  : m_prefix(prefix)
     , m_keyName(keyName)
     , m_face(face)
+    , m_verifyToBeSignedCallback(verifyToBeSignedCallback)
+    , m_verifySignRequestCallback(verifySignRequestCallback)
 {
   // generate default key randomly
   ndnBLSInit();
   m_sk.init();
   m_sk.getPublicKey(m_pk);
+  if (m_keyName.empty()) {
+    m_keyName = m_prefix;
+    m_keyName.append("KEY").appendTimestamp();
+  }
 
   Name invocationPrefix = m_prefix;
   invocationPrefix.append("mps").append("sign");
-  m_handles.push_back(m_face.setInterestFilter(
-      invocationPrefix, std::bind(&BLSSigner::onSignRequest, this, _2), nullptr, onRegisterFail));
-
-  Name resultPrefix = m_prefix;
-  resultPrefix.append("mps").append("result");
-  m_handles.push_back(m_face.setInterestFilter(
-      resultPrefix, std::bind(&BLSSigner::onResultFetch, this, _2), nullptr, onRegisterFail));
+  m_signRequestHandle = m_face.setInterestFilter(invocationPrefix,
+                                                 std::bind(&BLSSigner::onSignRequest, this, _2),
+                                                 nullptr, onRegisterFail);
 }
 
 BLSSigner::~BLSSigner()
 {
-  for (auto& i : m_handles) {
-    i.unregister();
-  }
-}
-
-void
-BLSSigner::setDataVerifyCallback(const function<bool(const Data&)>& func)
-{
-  m_dataVerifyCallback = func;
-}
-
-void
-BLSSigner::setSignatureVerifyCallback(const function<bool(const Interest&)>& func)
-{
-  m_interestVerifyCallback = func;
+  m_signRequestHandle.unregister();
 }
 
 void
@@ -66,38 +130,52 @@ BLSSigner::onSignRequest(const Interest& interest)
 {
   std::cout << "\n\nSigner: On sign request Interest: " << interest.getName().toUri() << std::endl;
 
-  if (!m_interestVerifyCallback || !m_interestVerifyCallback(interest) || !interest.isParametersDigestValid()) {
-    m_face.put(generateAck(interest.getName(), ReplyCode::Unauthorized, 0));
-    // bad request, let it timeout
+  if (!m_verifySignRequestCallback(interest) || !interest.isParametersDigestValid()) {
+    auto ack = generateSignRequestAck(interest.getName(), m_prefix, ReplyCode::Unauthorized, 0);
+    ndnBLSSign(m_sk, ack, m_keyName);
+    m_face.put(ack);
     return;
   }
   // parse
-  const auto& paramBlock = interest.getApplicationParameters();
-  paramBlock.parse();
   Name parameterDataName;
+  std::vector<uint8_t> peerPubKey;
   try {
-    if (paramBlock.get(tlv::ParameterDataName).isValid()) {
-      parameterDataName.wireDecode(paramBlock.get(tlv::ParameterDataName).blockFromValue());
-    }
-    else {
-      NDN_THROW(std::runtime_error("Block Element not found or Bad element type in signer's request"));
-    }
-    if (!interest.getName().get(m_prefix.size() + 2).isParametersSha256Digest()) {
-      NDN_THROW(std::runtime_error("Interest not end with parameter digest."));
-    }
+    parseSignRequestPayload(interest, parameterDataName, peerPubKey);
   }
   catch (const std::exception& e) {
-    NDN_LOG_ERROR("Got error in decoding invocation request: " << e.what());
-    m_face.put(generateAck(interest.getName(), ReplyCode::BadRequest, 0));
+    auto ack = generateSignRequestAck(interest.getName(), m_prefix, ReplyCode::Unauthorized, 0);
+    ndnBLSSign(m_sk, ack, m_keyName);
+    m_face.put(ack);
     return;
   }
 
+  auto statePtr = std::make_shared<SignRequestState>();
+  statePtr->m_code = ReplyCode::Processing;
+  statePtr->m_version = 0;
   auto requestId = random::generateSecureWord64();
-  RequestInstance instance;
-  instance.code = ReplyCode::Processing;
-  instance.version = 0;
-  m_results.emplace(requestId, instance);
-  m_face.put(generateAck(interest.getName(), ReplyCode::Processing, requestId));
+
+  Name resultPrefix = m_prefix;
+  resultPrefix.append("mps").append("result").appendNumber(requestId);
+  statePtr->m_resultPrefixHandle = m_face.setInterestFilter(
+    resultPrefix,
+    [this, statePtr, resultPrefix](const auto&, const auto& interest)
+    {
+      std::cout << "\n\nSigner: received result fetch Interest: " << interest.getName().toUri() << std::endl;
+      // parse request: /signer/mps/result/randomness/version/hash
+      // TODO: signature verification
+      if (interest.getName().size() != m_prefix.size() + 5) {
+        NDN_LOG_INFO("Bad result request name format");
+        return;
+      }
+      auto result = generateResultData(interest.getName(), resultPrefix, statePtr);
+      ndnBLSSign(m_sk, result, m_keyName);
+      m_face.put(result);
+    },
+    nullptr, onRegisterFail);
+
+  auto ack = generateSignRequestAck(interest.getName(), m_prefix, ReplyCode::Processing, requestId);
+  ndnBLSSign(m_sk, ack, m_keyName);
+  m_face.put(ack);
 
   // fetch parameter
   Interest fetchInterest(parameterDataName);
@@ -106,107 +184,41 @@ BLSSigner::onSignRequest(const Interest& interest)
   fetchInterest.setInterestLifetime(TIMEOUT);
   std::cout << "\n\nSigner: send Interest to fetch parameter: " << parameterDataName.toUri() << std::endl;
   m_face.expressInterest(
-      fetchInterest,
-      [=](const auto& interest, const auto& data) {
-        std::cout << "\n\nSigner: fetched parameter Data packet." << std::endl;
-        std::cout << data;
-
-        // parse fetched data
-        ReplyCode code = ReplyCode::OK;
-        Data unsignedData;
-        try {
-          unsignedData.wireDecode(data.getContent().blockFromValue());
-        }
-        catch (const std::exception& e) {
-          NDN_LOG_ERROR("Unsigned Data decoding error");
-          code = ReplyCode::FailedDependency;
-        }
-        if (!m_dataVerifyCallback || !m_dataVerifyCallback(unsignedData)) {
-          NDN_LOG_ERROR("Unsigned Data verification error");
-          code = ReplyCode::Unauthorized;
-        }
-        // generate result
-        std::cout << "Signer: result status code: " << static_cast<int>(code) << std::endl;
-
-        m_results[requestId].code = code;
-        if (code == ReplyCode::OK) {
-          m_results[requestId].signatureValue = ndnGenBLSSignature(m_sk, unsignedData);
-          std::cout << "signature value length: " << m_results[requestId].signatureValue.size() << std::endl;
-        }
-      },
-      [=](auto& interest, auto&) {
-        // nack
-        m_results[requestId].code = ReplyCode::FailedDependency;
-      },
-      [=](auto& interest) {
-        // timeout
-        m_results[requestId].code = ReplyCode::FailedDependency;
-      });
-}
-
-void
-BLSSigner::onResultFetch(const Interest& interest)
-{
-  std::cout << "\n\nSigner: received result fetch Interest: " << interest.getName().toUri() << std::endl;
-  // parse request
-  // /signer/mps/result/randomness/version/hash
-  if (interest.getName().size() != m_prefix.size() + 5) {
-    NDN_LOG_ERROR("Bad result request name format");
-    // bad request let it timeout
-    return;
-  }
-  auto resultId = readNonNegativeInteger(interest.getName().get(m_prefix.size() + 2));
-  auto it = m_results.find(resultId);
-  if (it == m_results.end()) {
-    // replayed or phishing request, let it timeout
-    return;
-  }
-  auto requestInstance = it->second;
-
-  // otherwise, reply
-  Data result(interest.getName());
-  Block contentBlock(ndn::tlv::Content);
-  contentBlock.push_back(makeStringBlock(tlv::Status, std::to_string(static_cast<int>(requestInstance.code))));
-  if (requestInstance.code == ReplyCode::Processing) {
-    requestInstance.version += 1;
-    it->second = requestInstance;
-    contentBlock.push_back(makeNonNegativeIntegerBlock(tlv::ResultAfter, ESTIMATE_PROCESS_TIME.count()));
-    Name newResultName = m_prefix;
-    newResultName.append("mps").append("result").appendNumber(resultId).appendVersion(requestInstance.version);
-    contentBlock.push_back(makeNestedBlock(tlv::ResultName, newResultName));
-  }
-  else if (requestInstance.code == ReplyCode::OK) {
-    m_results.erase(it);
-    contentBlock.push_back(makeBinaryBlock(tlv::BLSSigValue, requestInstance.signatureValue.data(), requestInstance.signatureValue.size()));
-    std::cout << "signature value length: " << requestInstance.signatureValue.size() << std::endl;
-  }
-  else {
-    m_results.erase(it);
-  }
-  contentBlock.encode();
-  result.setContent(contentBlock);
-  result.setFreshnessPeriod(TIMEOUT);
-  ndnBLSSign(m_sk, result, m_keyName);
-  m_face.put(result);
-}
-
-Data
-BLSSigner::generateAck(const Name& interestName, ReplyCode code, uint64_t requestId) const
-{
-  Data ack(interestName);
-  Block contentBlock(ndn::tlv::Content);
-  contentBlock.push_back(makeStringBlock(tlv::Status, std::to_string(static_cast<int>(ReplyCode::Processing))));
-  if (code == ReplyCode::Processing) {
-    contentBlock.push_back(makeNonNegativeIntegerBlock(tlv::ResultAfter, ESTIMATE_PROCESS_TIME.count()));
-    Name newResultName = m_prefix;
-    newResultName.append("mps").append("result").appendNumber(requestId).appendVersion(0);
-    contentBlock.push_back(makeNestedBlock(tlv::ResultName, newResultName));
-  }
-  contentBlock.encode();
-  ack.setContent(contentBlock);
-  ack.setFreshnessPeriod(TIMEOUT);
-  ndnBLSSign(m_sk, ack, m_keyName);
-  return ack;
+    fetchInterest,
+    [=](const auto& interest, const auto& data)
+    {
+      std::cout << "\n\nSigner: fetched parameter Data packet." << std::endl << data;
+      // parse fetched data
+      Data unsignedData;
+      try {
+        unsignedData.wireDecode(data.getContent().blockFromValue());
+      }
+      catch (const std::exception& e) {
+        NDN_LOG_ERROR("Unsigned Data decoding error");
+        statePtr->m_code = ReplyCode::FailedDependency;
+        return;
+      }
+      if (!m_verifyToBeSignedCallback(unsignedData)) {
+        NDN_LOG_ERROR("Unsigned Data verification error");
+        statePtr->m_code = ReplyCode::Unauthorized;
+        return;
+      }
+      // generate result
+      std::cout << "Signer: result status code is OK " << std::endl;
+      statePtr->m_code = ReplyCode::OK;
+      statePtr->m_signatureValue = ndnGenBLSSignature(m_sk, unsignedData);
+      std::cout << "signature value length: " << statePtr->m_signatureValue.size() << std::endl;
+    },
+    [=](auto& interest, auto&)
+    {
+      // nack
+      statePtr->m_code = ReplyCode::FailedDependency;
+    },
+    [=](auto& interest)
+    {
+      // timeout
+      statePtr->m_code = ReplyCode::FailedDependency;
+    });
 }
 
 }  // namespace mps

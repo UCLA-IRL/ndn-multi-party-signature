@@ -18,8 +18,6 @@ BOOST_AUTO_TEST_CASE(SingleSigner)
 
   // signer
   BLSSigner signer(Name("/signer"), face, Name("/signer/KEY/123"));
-  signer.setDataVerifyCallback([](auto) { return true; });
-  signer.setSignatureVerifyCallback([](auto) { return true; });
   advanceClocks(time::milliseconds(20), 10);
 
   // initiator
@@ -74,8 +72,6 @@ BOOST_AUTO_TEST_CASE(MultipleSigner)
   for (size_t i = 0; i < 5; i++) {
     std::string prefix = "/signer" + std::to_string(i + 1);
     signers.emplace_back(std::make_unique<BLSSigner>(Name(prefix), face, Name(prefix + "/KEY/123")));
-    signers[i]->setDataVerifyCallback([](auto) { return true; });
-    signers[i]->setSignatureVerifyCallback([](auto) { return true; });
   }
   advanceClocks(time::milliseconds(20), 10);
 

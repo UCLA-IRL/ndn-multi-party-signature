@@ -28,6 +28,7 @@ namespace tlv {
  * Custom tlv types for Multi-signature protocol packet encoding
  */
 enum : uint32_t {
+  EcdhPub = 145,
   InitializationVector = 157,
   EncryptedPayload = 159,
   AuthenticationTag = 175,
