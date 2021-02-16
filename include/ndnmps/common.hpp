@@ -29,6 +29,7 @@ namespace tlv {
  */
 enum : uint32_t {
   EcdhPub = 145,
+  Salt = 149,
   InitializationVector = 157,
   EncryptedPayload = 159,
   AuthenticationTag = 175,

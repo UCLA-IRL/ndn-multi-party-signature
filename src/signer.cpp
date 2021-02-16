@@ -2,6 +2,11 @@
 #include <ndn-cxx/security/signing-helpers.hpp>
 #include <ndn-cxx/util/logger.hpp>
 #include <ndn-cxx/util/random.hpp>
+#include <ndn-cxx/encoding/buffer-stream.hpp>
+#include <ndn-cxx/security/transform/base64-decode.hpp>
+#include <ndn-cxx/security/transform/base64-encode.hpp>
+#include <ndn-cxx/security/transform/buffer-source.hpp>
+#include <ndn-cxx/security/transform/stream-sink.hpp>
 #include <utility>
 #include <future>
 #include <iostream>
@@ -23,6 +28,7 @@ struct SignRequestState
   Buffer m_signatureValue;
   size_t m_version;
   RegisteredPrefixHandle m_resultPrefixHandle;
+  security::SigningInfo m_hmacSigningInfo;
 };
 
 /**
@@ -43,19 +49,32 @@ parseSignRequestPayload(const Interest& interest, Name& parameterDataName, std::
  * @brief Generate unsigned ACK data.
  */
 Data
-generateSignRequestAck(const Name& interestName, const Name& selfPrefix, ReplyCode code, uint64_t requestId)
+generateSignRequestAck(const Name& interestName, const Name& selfPrefix, ReplyCode code, uint64_t requestId = 0,
+                       const uint8_t* salt = nullptr, const uint8_t* selfPub = nullptr, size_t selfPubSize = 0,
+                       const uint8_t* aesKey = nullptr)
 {
   Data ack(interestName);
-  Block contentBlock(ndn::tlv::Content);
-  contentBlock.push_back(makeStringBlock(tlv::Status, std::to_string(static_cast<int>(ReplyCode::Processing))));
-  if (code == ReplyCode::Processing) {
-    contentBlock.push_back(makeNonNegativeIntegerBlock(tlv::ResultAfter, ESTIMATE_PROCESS_TIME.count()));
-    Name newResultName = selfPrefix;
-    newResultName.append("mps").append("result").appendNumber(requestId).appendVersion(0);
-    contentBlock.push_back(makeNestedBlock(tlv::ResultName, newResultName));
+  if (code != ReplyCode::Processing) {
+    Block contentBlock(ndn::tlv::Content);
+    contentBlock.push_back(makeStringBlock(tlv::Status, std::to_string(static_cast<int>(ReplyCode::Processing))));
+    ack.setContent(contentBlock);
+    ack.setFreshnessPeriod(TIMEOUT);
+    return ack;
   }
-  contentBlock.encode();
-  ack.setContent(contentBlock);
+  Block unencryptedBlock(tlv::EncryptedPayload);
+  unencryptedBlock.push_back(makeNonNegativeIntegerBlock(tlv::ResultAfter, ESTIMATE_PROCESS_TIME.count()));
+  Name newResultName = selfPrefix;
+  newResultName.append("mps").append("result").appendNumber(requestId).appendVersion(0);
+  unencryptedBlock.push_back(makeNestedBlock(tlv::ResultName, newResultName));
+  unencryptedBlock.encode();
+  auto encryptedBlock = encodeBlockWithAesGcm128(ndn::tlv::Content, aesKey,
+                                                 unencryptedBlock.value(), unencryptedBlock.value_size(),
+                                                 nullptr, 0);
+  encryptedBlock.push_back(makeStringBlock(tlv::Status, std::to_string(static_cast<int>(ReplyCode::Processing))));
+  encryptedBlock.push_back(makeBinaryBlock(tlv::Salt, salt, 32));
+  encryptedBlock.push_back(makeBinaryBlock(tlv::EcdhPub, selfPub, selfPubSize));
+  encryptedBlock.encode();
+  ack.setContent(encryptedBlock);
   ack.setFreshnessPeriod(TIMEOUT);
   return ack;
 }
@@ -74,8 +93,9 @@ generateResultData(const Name& interestName, const Name& resultPrefix, std::shar
     contentBlock.push_back(makeNestedBlock(tlv::ResultName, newResultName));
   }
   else if (statePtr->m_code == ReplyCode::OK) {
-    contentBlock.push_back(
-      makeBinaryBlock(tlv::BLSSigValue, statePtr->m_signatureValue.data(), statePtr->m_signatureValue.size()));
+    contentBlock.push_back(makeBinaryBlock(tlv::BLSSigValue,
+                                           statePtr->m_signatureValue.data(),
+                                           statePtr->m_signatureValue.size()));
     std::cout << "signature value length: " << statePtr->m_signatureValue.size() << std::endl;
     statePtr->m_resultPrefixHandle.cancel();
   }
@@ -86,6 +106,18 @@ generateResultData(const Name& interestName, const Name& resultPrefix, std::shar
   result.setContent(contentBlock);
   result.setFreshnessPeriod(TIMEOUT);
   return result;
+}
+
+Data
+parseParameterData(const Data& data, std::shared_ptr<SignRequestState> statePtr)
+{
+  auto contentBlock = data.getContent();
+  contentBlock.parse();
+  Block dataBlock(std::make_shared<Buffer>(decodeBlockWithAesGcm128(contentBlock,
+                                                                    statePtr->m_aesKey.data(),
+                                                                    nullptr, 0)));
+  Data unsignedData(dataBlock);
+  return unsignedData;
 }
 
 void
@@ -131,7 +163,7 @@ BLSSigner::onSignRequest(const Interest& interest)
   std::cout << "\n\nSigner: On sign request Interest: " << interest.getName().toUri() << std::endl;
 
   if (!m_verifySignRequestCallback(interest) || !interest.isParametersDigestValid()) {
-    auto ack = generateSignRequestAck(interest.getName(), m_prefix, ReplyCode::Unauthorized, 0);
+    auto ack = generateSignRequestAck(interest.getName(), m_prefix, ReplyCode::Unauthorized);
     ndnBLSSign(m_sk, ack, m_keyName);
     m_face.put(ack);
     return;
@@ -143,17 +175,29 @@ BLSSigner::onSignRequest(const Interest& interest)
     parseSignRequestPayload(interest, parameterDataName, peerPubKey);
   }
   catch (const std::exception& e) {
-    auto ack = generateSignRequestAck(interest.getName(), m_prefix, ReplyCode::Unauthorized, 0);
+    auto ack = generateSignRequestAck(interest.getName(), m_prefix,ReplyCode::Unauthorized);
     ndnBLSSign(m_sk, ack, m_keyName);
     m_face.put(ack);
     return;
   }
-
+  // generate state for the request
   auto statePtr = std::make_shared<SignRequestState>();
   statePtr->m_code = ReplyCode::Processing;
   statePtr->m_version = 0;
-  auto requestId = random::generateSecureWord64();
+  // ECDH
+  auto dhSecret = statePtr->m_ecdh.deriveSecret(peerPubKey);
+  std::array<uint8_t, 32> salt;
+  random::generateSecureBytes(salt.data(), salt.size());
+  std::array<uint8_t, 48> aesAndHmac;
+  hkdf(dhSecret.data(), dhSecret.size(), salt.data(), salt.size(), aesAndHmac.data(), aesAndHmac.size());
+  std::memcpy(statePtr->m_aesKey.data(), aesAndHmac.data(), 16);
+  auto hmacKeyStr = base64EncodeFromBytes(aesAndHmac.data() + 16, 32, false);
+  // HMAC
+  statePtr->m_hmacSigningInfo.setSigningHmacKey(hmacKeyStr);
+  statePtr->m_hmacSigningInfo.setDigestAlgorithm(DigestAlgorithm::SHA256);
+  statePtr->m_hmacSigningInfo.setSignedInterestFormat(security::SignedInterestFormat::V03);
 
+  auto requestId = random::generateSecureWord64();
   Name resultPrefix = m_prefix;
   resultPrefix.append("mps").append("result").appendNumber(requestId);
   statePtr->m_resultPrefixHandle = m_face.setInterestFilter(
@@ -173,7 +217,9 @@ BLSSigner::onSignRequest(const Interest& interest)
     },
     nullptr, onRegisterFail);
 
-  auto ack = generateSignRequestAck(interest.getName(), m_prefix, ReplyCode::Processing, requestId);
+  auto selfPubKey = statePtr->m_ecdh.getSelfPubKey();
+  auto ack = generateSignRequestAck(interest.getName(), m_prefix, ReplyCode::Processing, requestId,
+                                    salt.data(), selfPubKey.data(), selfPubKey.size(), statePtr->m_aesKey.data());
   ndnBLSSign(m_sk, ack, m_keyName);
   m_face.put(ack);
 
@@ -191,7 +237,7 @@ BLSSigner::onSignRequest(const Interest& interest)
       // parse fetched data
       Data unsignedData;
       try {
-        unsignedData.wireDecode(data.getContent().blockFromValue());
+        unsignedData = parseParameterData(data, statePtr);
       }
       catch (const std::exception& e) {
         NDN_LOG_ERROR("Unsigned Data decoding error");

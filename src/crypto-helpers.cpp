@@ -333,46 +333,18 @@ loadBigU32(const std::vector<uint8_t>& iv, size_t pos)
   return result;
 }
 
-// Can be removed after boost version 1.72, replaced by boost::endian::store_big_u32
-static void
-storeBigU32(uint8_t* iv, uint32_t counter)
-{
-  uint32_t temp = boost::endian::native_to_big(counter);
-  std::memcpy(iv, reinterpret_cast<const uint8_t*>(&temp), 4);
-  return;
-}
-
-static void
-updateIv(std::vector<uint8_t>& iv, size_t payloadSize)
-{
-  // uint32_t counter = boost::endian::load_big_u32(&iv[8]);
-  uint32_t counter = loadBigU32(iv, 8);
-  uint32_t increment = (payloadSize + 15) / 16;
-  if (std::numeric_limits<uint32_t>::max() - counter <= increment) {
-    NDN_THROW(std::runtime_error("Error incrementing the AES block counter: "
-                                 "too many blocks have been encrypted for the same request instance"));
-  }
-  else {
-    counter += increment;
-  }
-  // boost::endian::store_big_u32(&iv[8], counter);
-  storeBigU32(&iv[8], counter);
-}
-
 Block
 encodeBlockWithAesGcm128(uint32_t tlvType, const uint8_t* key,
                          const uint8_t* payload, size_t payloadSize,
-                         const uint8_t* associatedData, size_t associatedDataSize,
-                         std::vector<uint8_t>& encryptionIv)
+                         const uint8_t* associatedData, size_t associatedDataSize)
 {
   // The spec of AES encrypted payload TLV used in NDNCERT:
   //   https://github.com/named-data/ndncert/wiki/NDNCERT-Protocol-0.3#242-aes-gcm-encryption
   Buffer encryptedPayload(payloadSize);
   uint8_t tag[16];
-  if (encryptionIv.empty()) {
-    encryptionIv.resize(12, 0);
-    random::generateSecureBytes(encryptionIv.data(), 8);
-  }
+  std::vector<uint8_t> encryptionIv;
+  encryptionIv.resize(12, 0);
+  random::generateSecureBytes(encryptionIv.data(), 8);
   size_t encryptedPayloadLen = aesGcm128Encrypt(payload, payloadSize, associatedData, associatedDataSize,
                                                 key, encryptionIv.data(), encryptedPayload.data(), tag);
   Block content(tlvType);
@@ -380,15 +352,12 @@ encodeBlockWithAesGcm128(uint32_t tlvType, const uint8_t* key,
   content.push_back(makeBinaryBlock(tlv::AuthenticationTag, tag, 16));
   content.push_back(makeBinaryBlock(tlv::EncryptedPayload, encryptedPayload.data(), encryptedPayloadLen));
   content.encode();
-  // update IV's counter
-  updateIv(encryptionIv, payloadSize);
   return content;
 }
 
 Buffer
 decodeBlockWithAesGcm128(const Block& block, const uint8_t* key,
-                         const uint8_t* associatedData, size_t associatedDataSize,
-                         std::vector<uint8_t>& decryptionIv)
+                         const uint8_t* associatedData, size_t associatedDataSize)
 {
   // The spec of AES encrypted payload TLV used in NDNCERT:
   //   https://github.com/named-data/ndncert/wiki/NDNCERT-Protocol-0.3#242-aes-gcm-encryption
@@ -396,15 +365,6 @@ decodeBlockWithAesGcm128(const Block& block, const uint8_t* key,
   const auto& encryptedPayloadBlock = block.get(tlv::EncryptedPayload);
   Buffer result(encryptedPayloadBlock.value_size());
   std::vector<uint8_t> currentIv(block.get(tlv::InitializationVector).value(), block.get(tlv::InitializationVector).value() + 12);
-  if (decryptionIv.empty()) {
-    decryptionIv = currentIv;
-  }
-  else {
-    if (currentIv != decryptionIv) {
-      NDN_THROW(std::runtime_error("Error when decrypting the AES Encrypted Block: "
-                                   "The observed IV is incorrectly formed."));
-    }
-  }
   auto resultLen = aesGcm128Decrypt(encryptedPayloadBlock.value(), encryptedPayloadBlock.value_size(),
                                     associatedData, associatedDataSize, block.get(tlv::AuthenticationTag).value(),
                                     key, currentIv.data(), result.data());
@@ -412,8 +372,17 @@ decodeBlockWithAesGcm128(const Block& block, const uint8_t* key,
     NDN_THROW(std::runtime_error("Error when decrypting the AES Encrypted Block: "
                                  "Decrypted payload is of an unexpected size"));
   }
-  updateIv(decryptionIv, resultLen);
   return result;
+}
+
+std::string
+base64EncodeFromBytes(const uint8_t* data, size_t len, bool needBreak)
+{
+  std::stringstream ss;
+  security::transform::bufferSource(data, len)
+      >> security::transform::base64Encode(needBreak)
+      >> security::transform::streamSink(ss);
+  return ss.str();
 }
 
 } // namespace mps

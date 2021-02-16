@@ -44,6 +44,17 @@ struct MultiSignGlobalState
   std::vector<Buffer> m_fetchedSignatures;
 };
 
+struct MultiSignPerSignerState
+{
+  ECDHState m_ecdh;
+  std::promise<Data> m_paraDataPromise;
+  std::array<uint8_t, 16> m_aesKey;
+  Data m_paraData;
+  RegisteredPrefixHandle m_paraPrefixEvent;
+  scheduler::EventId m_resultFetchEvent;
+  security::SigningInfo m_hmacSigningInfo;
+};
+
 std::tuple<Data, Data>
 prepareUnfinishedDataAndInfoData(const Data& unsignedData, const Name& initiatorPrefix)
 {
@@ -91,31 +102,46 @@ prepareSignRequestInterest(const Name& signerPrefix, const Name& paraDataName, c
   return signRequestInt;
 }
 
-std::tuple<std::string, time::milliseconds, Name>
-parseAckReply(const Data& data)
+void
+parseAckReply(const Data& data, std::string& ackCode, time::milliseconds& result_ms, Name& resultName,
+              std::shared_ptr<MultiSignPerSignerState> perSignerState)
 {
+  std::vector<uint8_t> peerPub;
+  std::array<uint8_t, 32> salt;
   auto contentBlock = data.getContent();
   contentBlock.parse();
-  auto ackCode = readString(contentBlock.get(tlv::Status));
+  ackCode = readString(contentBlock.get(tlv::Status));
   if (ackCode == "102") {
-    time::milliseconds result_ms = time::milliseconds(readNonNegativeInteger(contentBlock.get(tlv::ResultAfter)));
-    Name resultName(contentBlock.get(tlv::ResultName).blockFromValue());
-    return std::make_tuple(ackCode, result_ms, resultName);
+    const auto& ecdhBlock = contentBlock.get(tlv::EcdhPub);
+    peerPub.resize(ecdhBlock.value_size());
+    std::memcpy(peerPub.data(), ecdhBlock.value(), ecdhBlock.value_size());
+
+    const auto& saltBlock = contentBlock.get(tlv::Salt);
+    std::memcpy(salt.data(), saltBlock.value(), saltBlock.value_size());
   }
   else {
     NDN_THROW(std::runtime_error("Rejected by the signer with Error code" + ackCode));
   }
+  // ECDH and generate HMAC KEY and AES KEY
+  auto dhSecret = perSignerState->m_ecdh.deriveSecret(peerPub);
+  std::array<uint8_t, 48> aesAndHmac;
+  hkdf(dhSecret.data(), dhSecret.size(), salt.data(), salt.size(), aesAndHmac.data(), aesAndHmac.size());
+  std::memcpy(perSignerState->m_aesKey.data(), aesAndHmac.data(), 16);
+  auto hmacKeyStr = base64EncodeFromBytes(aesAndHmac.data() + 16, 32, false);
+  // HMAC
+  perSignerState->m_hmacSigningInfo.setSigningHmacKey(hmacKeyStr);
+  perSignerState->m_hmacSigningInfo.setDigestAlgorithm(DigestAlgorithm::SHA256);
+  perSignerState->m_hmacSigningInfo.setSignedInterestFormat(security::SignedInterestFormat::V03);
+  // Decrypt
+  Block decrypteBlock(ndn::tlv::Content,
+                      std::make_shared<Buffer>(decodeBlockWithAesGcm128(contentBlock,
+                                                                        perSignerState->m_aesKey.data(),
+                                                                        nullptr, 0)));
+  decrypteBlock.parse();
+  result_ms = time::milliseconds(readNonNegativeInteger(decrypteBlock.get(tlv::ResultAfter)));
+  resultName.wireDecode(decrypteBlock.get(tlv::ResultName).blockFromValue());
+  std::cout << "result name: " << resultName.toUri() << std::endl;
 }
-
-struct MultiSignPerSignerState
-{
-  ECDHState m_ecdh;
-  std::promise<Data> m_paraDataPromise;
-  std::array<uint8_t, 16> m_aesKey;
-  Data m_paraData;
-  RegisteredPrefixHandle m_paraPrefixEvent;
-  scheduler::EventId m_resultFetchEvent;
-};
 
 void
 MPSInitiator::performRPC(const Name& signerKeyName, const Name& signingKeyName,
@@ -159,19 +185,26 @@ MPSInitiator::performRPC(const Name& signerKeyName, const Name& signingKeyName,
                 << std::endl << ackData;
 
       // parse ack content
-      // generate aes key and hmac key
       std::string ackCode;
       time::milliseconds result_ms;
       Name resultName;
       try {
-        std::tie(ackCode, result_ms, resultName) = parseAckReply(ackData);
+        parseAckReply(ackData, ackCode, result_ms, resultName, perSignerState);
       }
       catch (const std::exception& e) {
         // should abort and change to another signer
+        std::cout << e.what() << std::endl;
+        return;
       }
-
       // update paraData to be ready to be fetched
-      m_keyChain.sign(perSignerState->m_paraData, signingByKey(signingKeyName));
+      const auto& unencryptedBlock = perSignerState->m_paraData.getContent();
+      auto encryptedBlock = encodeBlockWithAesGcm128(ndn::tlv::Content,
+                                                     perSignerState->m_aesKey.data(),
+                                                     unencryptedBlock.value(),
+                                                     unencryptedBlock.value_size(),
+                                                     nullptr, 0);
+      perSignerState->m_paraData.setContent(encryptedBlock);
+      m_keyChain.sign(perSignerState->m_paraData, perSignerState->m_hmacSigningInfo);
       perSignerState->m_paraDataPromise.set_value(perSignerState->m_paraData);
       std::cout << "Initiator: Register prefix for parameter data: "
                 << perSignerState->m_paraData.getName().toUri() << std::endl;
@@ -182,7 +215,7 @@ MPSInitiator::performRPC(const Name& signerKeyName, const Name& signingKeyName,
         [=, &successCb, &failureCb, &signingKeyName]()
         {
           std::cout << "\n\nInitiator: Send Interest for result Data from signer: "
-                    << resultName.getPrefix(-4).toUri() << std::endl;
+                    << resultName.getPrefix(-3).toUri() << std::endl;
           perSignerState->m_paraPrefixEvent.cancel();
           Interest resultFetchInt(resultName);
           resultFetchInt.setCanBePrefix(true);

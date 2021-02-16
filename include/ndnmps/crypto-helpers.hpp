@@ -144,15 +144,12 @@ aesGcm128Decrypt(const uint8_t* ciphertext, size_t ciphertextLen, const uint8_t*
  * @param payloadSize The size of the plaintext payload.
  * @param associatedData The associated data used for authentication.
  * @param associatedDataSize The size of associated data.
- * @param encryptionIv The IV used by the last AES encryption and is needed by subsequent invocations of this function
- *                     with the same @p key.
  * @return Block The TLV block with @p tlv_type TLV TYPE.
  */
 Block
 encodeBlockWithAesGcm128(uint32_t tlvType, const uint8_t* key,
                          const uint8_t* payload, size_t payloadSize,
-                         const uint8_t* associatedData, size_t associatedDataSize,
-                         std::vector<uint8_t>& encryptionIv);
+                         const uint8_t* associatedData, size_t associatedDataSize);
 
 /**
  * @brief Decode the payload from TLV block with Authenticated GCM 128 Encryption.
@@ -163,14 +160,14 @@ encodeBlockWithAesGcm128(uint32_t tlvType, const uint8_t* key,
  * @param key The AES key used for encryption.
  * @param associatedData The associated data used for authentication.
  * @param associatedDataSize The size of associated data.
- * @param decryptionIv The IV observed in the last AES decryption and is needed by subsequent
- *                     invocations of this function with the same @p key.
  * @return Buffer The plaintext buffer.
  */
 Buffer
 decodeBlockWithAesGcm128(const Block& block, const uint8_t* key,
-                         const uint8_t* associatedData, size_t associatedDataSize,
-                         std::vector<uint8_t>& decryptionIv);
+                         const uint8_t* associatedData, size_t associatedDataSize);
+
+std::string
+base64EncodeFromBytes(const uint8_t* data, size_t len, bool needBreak);
 
 } // namespace mps
 } // namespace ndn
