@@ -2,11 +2,9 @@
 #include <ndn-cxx/security/signing-helpers.hpp>
 #include <ndn-cxx/util/logger.hpp>
 #include <ndn-cxx/util/random.hpp>
-#include <ndn-cxx/encoding/buffer-stream.hpp>
 #include <ndn-cxx/security/transform/base64-decode.hpp>
-#include <ndn-cxx/security/transform/base64-encode.hpp>
 #include <ndn-cxx/security/transform/buffer-source.hpp>
-#include <ndn-cxx/security/transform/stream-sink.hpp>
+#include <ndn-cxx/security/verification-helpers.hpp>
 #include <utility>
 #include <future>
 #include <iostream>
@@ -238,7 +236,12 @@ BLSSigner::onSignRequest(const Interest& interest)
     [=](const auto& interest, const auto& data)
     {
       std::cout << "\n\nSigner: fetched parameter Data packet." << std::endl << data;
-      // parse fetched data
+      if (!security::verifySignature(data, m_keyChain.getTpm(),
+                                    statePtr->m_hmacSigningInfo.getSignerName(),
+                                    DigestAlgorithm::SHA256)) {
+        std::cout << "Signer: HMAC verification failed" << std::endl;
+        return;
+      }
       Data unsignedData;
       try {
         unsignedData = parseParameterData(data, statePtr);

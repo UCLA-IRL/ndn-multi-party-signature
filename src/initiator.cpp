@@ -1,6 +1,7 @@
 #include "ndnmps/initiator.hpp"
 #include "ndnmps/crypto-helpers.hpp"
 #include <ndn-cxx/security/signing-helpers.hpp>
+#include <ndn-cxx/security/verification-helpers.hpp>
 #include <ndn-cxx/util/logger.hpp>
 #include <ndn-cxx/util/random.hpp>
 #include <utility>
@@ -239,6 +240,12 @@ MPSInitiator::performRPC(const Name& signerKeyName, const Name& signingKeyName,
 
             std::cout << "\n\nInitiator: Fetched result Data from signer: "
                       << signerPrefix.toUri() << std::endl << resultData;
+            if (!security::verifySignature(resultData, m_keyChain.getTpm(),
+                                          perSignerState->m_hmacSigningInfo.getSignerName(),
+                                          DigestAlgorithm::SHA256)) {
+              std::cout << "Initiator: HMAC verification failed" << std::endl;
+              return;
+            }
             auto resultContentBlock = parseResultData(resultData, perSignerState);
             auto code = readString(resultContentBlock.get(tlv::Status));
             if (code == "200") {
