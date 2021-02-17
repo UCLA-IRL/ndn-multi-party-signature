@@ -24,6 +24,7 @@ class BLSSigner
 {
 private:
   Face& m_face;
+  KeyChain& m_keyChain;
   VerifyToBeSignedCallback m_verifyToBeSignedCallback;
   VerifySignRequestCallback m_verifySignRequestCallback;
   RegisteredPrefixHandle m_signRequestHandle;
@@ -46,7 +47,7 @@ public:
    * @param prefix The routable prefix to register prefix to. When empty, will automatically generate key name as
    *               /prefix/KEY/[timestamp]
    */
-  BLSSigner(const Name& prefix, Face& face,
+  BLSSigner(const Name& prefix, Face& face, KeyChain& keyChain,
             const Name& keyName = Name(),
             const VerifyToBeSignedCallback& verifyToBeSignedCallback = [](auto) { return true; },
             const VerifySignRequestCallback& verifySignRequestCallback = [](auto) { return true; });

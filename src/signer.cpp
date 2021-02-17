@@ -83,27 +83,30 @@ Data
 generateResultData(const Name& interestName, const Name& resultPrefix, std::shared_ptr<SignRequestState> statePtr)
 {
   Data result(interestName);
-  Block contentBlock(ndn::tlv::Content);
-  contentBlock.push_back(makeStringBlock(tlv::Status, std::to_string(static_cast<int>(statePtr->m_code))));
+  Block unencryptedBlock(tlv::EncryptedPayload);
+  unencryptedBlock.push_back(makeStringBlock(tlv::Status, std::to_string(static_cast<int>(statePtr->m_code))));
   if (statePtr->m_code == ReplyCode::Processing) {
     statePtr->m_version += 1;
-    contentBlock.push_back(makeNonNegativeIntegerBlock(tlv::ResultAfter, ESTIMATE_PROCESS_TIME.count()));
+    unencryptedBlock.push_back(makeNonNegativeIntegerBlock(tlv::ResultAfter, ESTIMATE_PROCESS_TIME.count()));
     Name newResultName = resultPrefix;
     newResultName.appendVersion(statePtr->m_version);
-    contentBlock.push_back(makeNestedBlock(tlv::ResultName, newResultName));
+    unencryptedBlock.push_back(makeNestedBlock(tlv::ResultName, newResultName));
   }
   else if (statePtr->m_code == ReplyCode::OK) {
-    contentBlock.push_back(makeBinaryBlock(tlv::BLSSigValue,
-                                           statePtr->m_signatureValue.data(),
-                                           statePtr->m_signatureValue.size()));
+    unencryptedBlock.push_back(makeBinaryBlock(tlv::BLSSigValue,
+                                               statePtr->m_signatureValue.data(),
+                                               statePtr->m_signatureValue.size()));
     std::cout << "signature value length: " << statePtr->m_signatureValue.size() << std::endl;
     statePtr->m_resultPrefixHandle.cancel();
   }
   else {
     statePtr->m_resultPrefixHandle.cancel();
   }
-  contentBlock.encode();
-  result.setContent(contentBlock);
+  unencryptedBlock.encode();
+  auto encryptedBlock = encodeBlockWithAesGcm128(ndn::tlv::Content, statePtr->m_aesKey.data(),
+                                                 unencryptedBlock.value(), unencryptedBlock.value_size(),
+                                                 nullptr, 0);
+  result.setContent(encryptedBlock);
   result.setFreshnessPeriod(TIMEOUT);
   return result;
 }
@@ -126,11 +129,12 @@ onRegisterFail(const Name& prefix, const std::string& reason)
   NDN_LOG_ERROR("Fail to register prefix " << prefix.toUri() << " because " << reason);
 }
 
-BLSSigner::BLSSigner(const Name& prefix, Face& face,
+BLSSigner::BLSSigner(const Name& prefix, Face& face, KeyChain& keyChain,
                      const Name& keyName,
                      const VerifyToBeSignedCallback& verifyToBeSignedCallback,
                      const VerifySignRequestCallback& verifySignRequestCallback)
   : m_prefix(prefix)
+  , m_keyChain(keyChain)
     , m_keyName(keyName)
     , m_face(face)
     , m_verifyToBeSignedCallback(verifyToBeSignedCallback)
@@ -212,7 +216,7 @@ BLSSigner::onSignRequest(const Interest& interest)
         return;
       }
       auto result = generateResultData(interest.getName(), resultPrefix, statePtr);
-      ndnBLSSign(m_sk, result, m_keyName);
+      m_keyChain.sign(result, statePtr->m_hmacSigningInfo);
       m_face.put(result);
     },
     nullptr, onRegisterFail);

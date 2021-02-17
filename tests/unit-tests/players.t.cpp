@@ -17,7 +17,7 @@ BOOST_AUTO_TEST_CASE(SingleSigner)
   util::DummyClientFace face(io, m_keyChain, { true, true });
 
   // signer
-  BLSSigner signer(Name("/signer"), face, Name("/signer/KEY/123"));
+  BLSSigner signer(Name("/signer"), face, m_keyChain, Name("/signer/KEY/123"));
   advanceClocks(time::milliseconds(20), 10);
 
   // initiator
@@ -71,7 +71,7 @@ BOOST_AUTO_TEST_CASE(MultipleSigner)
   std::vector<std::unique_ptr<BLSSigner>> signers;
   for (size_t i = 0; i < 5; i++) {
     std::string prefix = "/signer" + std::to_string(i + 1);
-    signers.emplace_back(std::make_unique<BLSSigner>(Name(prefix), face, Name(prefix + "/KEY/123")));
+    signers.emplace_back(std::make_unique<BLSSigner>(Name(prefix), face, m_keyChain, Name(prefix + "/KEY/123")));
   }
   advanceClocks(time::milliseconds(20), 10);
 
