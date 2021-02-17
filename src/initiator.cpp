@@ -49,10 +49,12 @@ struct MultiSignPerSignerState
   ECDHState m_ecdh;
   std::promise<Data> m_paraDataPromise;
   std::array<uint8_t, 16> m_aesKey;
-  Data m_paraData;
-  RegisteredPrefixHandle m_paraPrefixEvent;
-  scheduler::EventId m_resultFetchEvent;
   security::SigningInfo m_hmacSigningInfo;
+  Data m_paraData;
+  Name m_nextResultName;
+  RegisteredPrefixHandle m_paraPrefixHandle;
+  scheduler::EventId m_resultFetchHandle;
+  std::function<void()> m_resultFetchCallback;
 };
 
 std::tuple<Data, Data>
@@ -165,7 +167,7 @@ MPSInitiator::performRPC(const Name& signerKeyName, const Name& signingKeyName,
   // prepare a future for finalized parameter data
   std::shared_future<Data> paraDataFuture(perSignerState->m_paraDataPromise.get_future());
   // register prefix to answer future parameter data
-  perSignerState->m_paraPrefixEvent = m_face.setInterestFilter(
+  perSignerState->m_paraPrefixHandle = m_face.setInterestFilter(
     perSignerState->m_paraData.getName(),
     [paraDataFuture, this](const auto&,
                            const auto& interest) mutable
@@ -198,9 +200,8 @@ MPSInitiator::performRPC(const Name& signerKeyName, const Name& signingKeyName,
       // parse ack content
       std::string ackCode;
       time::milliseconds result_ms;
-      Name resultName;
       try {
-        parseAckReply(ackData, ackCode, result_ms, resultName, perSignerState);
+        parseAckReply(ackData, ackCode, result_ms, perSignerState->m_nextResultName, perSignerState);
       }
       catch (const std::exception& e) {
         // should abort and change to another signer
@@ -221,12 +222,12 @@ MPSInitiator::performRPC(const Name& signerKeyName, const Name& signingKeyName,
                 << perSignerState->m_paraData.getName().toUri() << std::endl;
 
       // set the scheduler to fetch the result
-      auto resultFetchCallback = [=, &successCb, &failureCb, &signingKeyName]()
+      perSignerState->m_resultFetchCallback = [=, &successCb, &failureCb, &signingKeyName]()
       {
         std::cout << "\n\nInitiator: Send Interest for result Data from signer: "
-                  << resultName.getPrefix(-3).toUri() << std::endl;
-        perSignerState->m_paraPrefixEvent.cancel();
-        Interest resultFetchInt(resultName);
+                  << perSignerState->m_nextResultName.getPrefix(-3).toUri() << std::endl;
+        perSignerState->m_paraPrefixHandle.cancel();
+        Interest resultFetchInt(perSignerState->m_nextResultName);
         resultFetchInt.setCanBePrefix(true);
         resultFetchInt.setMustBeFresh(true);
         m_interestSigner.makeSignedInterest(resultFetchInt, signingByKey(signingKeyName));
@@ -238,8 +239,6 @@ MPSInitiator::performRPC(const Name& signerKeyName, const Name& signingKeyName,
 
             std::cout << "\n\nInitiator: Fetched result Data from signer: "
                       << signerPrefix.toUri() << std::endl << resultData;
-
-
             auto resultContentBlock = parseResultData(resultData, perSignerState);
             auto code = readString(resultContentBlock.get(tlv::Status));
             if (code == "200") {
@@ -267,12 +266,15 @@ MPSInitiator::performRPC(const Name& signerKeyName, const Name& signingKeyName,
             }
             else {
               // processing
+              auto result_ms = time::milliseconds(readNonNegativeInteger(resultContentBlock.get(tlv::ResultAfter)));
+              Name newResultName(resultContentBlock.get(tlv::ResultName).blockFromValue());
+              perSignerState->m_resultFetchHandle = m_scheduler.schedule(result_ms, perSignerState->m_resultFetchCallback);
             }
           },
           std::bind(&onNack, _1, _2, failureCb),
           std::bind(&onTimeout, _1, failureCb));
       };
-      perSignerState->m_resultFetchEvent = m_scheduler.schedule(result_ms, resultFetchCallback);
+      perSignerState->m_resultFetchHandle = m_scheduler.schedule(result_ms, perSignerState->m_resultFetchCallback);
     },
     std::bind(&onNack, _1, _2, failureCb),
     std::bind(&onTimeout, _1, failureCb));
