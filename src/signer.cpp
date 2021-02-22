@@ -140,7 +140,13 @@ BLSSigner::BLSSigner(const Name& prefix, Face& face, KeyChain& keyChain,
 {
   // generate default key randomly
   ndnBLSInit();
+  auto begin = std::chrono::steady_clock::now();
   m_sk.init();
+  auto end = std::chrono::steady_clock::now();
+  std::cout << "Signer generating key pair: "
+            << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count()
+            << "[µs]" << std::endl;
+  
   m_sk.getPublicKey(m_pk);
   if (m_keyName.empty()) {
     m_keyName = m_prefix;
@@ -259,7 +265,12 @@ BLSSigner::onSignRequest(const Interest& interest)
       // generate result
       std::cout << "Signer: result status code is OK " << std::endl;
       statePtr->m_code = ReplyCode::OK;
+      auto begin = std::chrono::steady_clock::now();
       statePtr->m_signatureValue = ndnGenBLSSignature(m_sk, unsignedData);
+      auto end = std::chrono::steady_clock::now();
+      std::cout << "Signer generating signature piece: "
+                << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count()
+                << "[µs]" << std::endl;
       std::cout << "signature value length: " << statePtr->m_signatureValue.size() << std::endl;
     },
     [=](auto& interest, auto&)

@@ -38,15 +38,31 @@ BLSVerifier::verify(const Data& data, const Data& signatureInfoData)
   if (signerListBlock.get(tlv::MpsSignerList).isValid()) {
     signerList.wireDecode(signerListBlock.get(tlv::MpsSignerList));
   }
+  auto begin = std::chrono::steady_clock::now();
   if (!m_schemaContainer.passSchema(data.getName(), signerList)) {
     NDN_LOG_INFO("signer list cannot pass the schema");
     return false;
   }
+  auto end = std::chrono::steady_clock::now();
+  std::cout << "Verifier verifying signer lists: "
+            << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count()
+            << "[µs]" << std::endl;
 
   // verify signature
   BLSPublicKey aggKey;
+  begin = std::chrono::steady_clock::now();
   aggKey = m_schemaContainer.aggregateKey(signerList);
-  return ndnBLSVerify(aggKey, data);
+  end = std::chrono::steady_clock::now();
+  std::cout << "Verifier aggregating public keys of size " << signerList.m_signers.size() << ": "
+            << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count()
+            << "[µs]" << std::endl;
+  begin = std::chrono::steady_clock::now();
+  auto verifyResult = ndnBLSVerify(aggKey, data);
+  end = std::chrono::steady_clock::now();
+  std::cout << "Verifier verifying BLS signature: "
+            << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count()
+            << "[µs]" << std::endl;
+  return verifyResult;
 }
 
 void

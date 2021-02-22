@@ -240,7 +240,13 @@ MPSInitiator::performRPC(const Name& signerKeyName, std::shared_ptr<MultiSignGlo
               if (globalState->m_fetchedSignatures.size() ==
                   globalState->m_signers.m_signers.size()) {
                 // all signatures have been fetched
-                auto aggSignature = std::make_shared<Buffer>(ndnBLSAggregateSignature(globalState->m_fetchedSignatures));
+                auto begin = std::chrono::steady_clock::now();
+                auto aggSignature = std::make_shared<Buffer>(
+                  ndnBLSAggregateSignature(globalState->m_fetchedSignatures));
+                auto end = std::chrono::steady_clock::now();
+                std::cout << "Initiator aggregating signature pieces of size" << globalState->m_fetchedSignatures.size() << ": "
+                          << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count()
+                          << "[µs]" << std::endl;
                 globalState->m_toBeSigned.setSignatureValue(aggSignature);
                 globalState->m_toBeSigned.wireEncode();
 
