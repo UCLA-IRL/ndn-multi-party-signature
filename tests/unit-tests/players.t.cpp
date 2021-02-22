@@ -55,7 +55,7 @@ BOOST_AUTO_TEST_CASE(SingleSigner)
                             [](const auto& reason) {
                               BOOST_CHECK(false);
                             });
-  advanceClocks(time::milliseconds(200), 10);
+  advanceClocks(time::milliseconds(100), 11);
   BOOST_CHECK(callbackInvoked);
   BOOST_CHECK(!verifier.verify(signedData, infoData));
   verifier.m_schemaContainer.m_schemas.push_back(schema);

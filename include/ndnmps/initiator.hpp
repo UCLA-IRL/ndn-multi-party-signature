@@ -50,9 +50,7 @@ public:
 
 private:
   void
-  performRPC(const Name& signerKeyName, const Name& signingKeyName,
-             const SignatureFinishCallback& successCb, const SignatureFailureCallback& failureCb,
-             std::shared_ptr<MultiSignGlobalState> globalState);
+  performRPC(const Name& signerKeyName, std::shared_ptr<MultiSignGlobalState> globalState);
 };
 
 }  // namespace mps

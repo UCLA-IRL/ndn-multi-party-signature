@@ -14,21 +14,6 @@ namespace mps {
 
 NDN_LOG_INIT(ndnmps.mpsinitiator);
 
-void
-onNack(const Interest& interest, const lp::Nack& nack, const SignatureFailureCallback& failureCb)
-{
-  NDN_LOG_ERROR("Received NACK with reason " << nack.getReason() << " for " << interest.getName());
-  failureCb("Received NACK with reason " + std::to_string(static_cast<int>(nack.getReason())) + " for " +
-            interest.getName().toUri());
-}
-
-void
-onTimeout(const Interest& interest, const SignatureFailureCallback& failureCb)
-{
-  NDN_LOG_ERROR("interest time out for " << interest.getName());
-  failureCb("interest time out for " + interest.getName().toUri());
-}
-
 MPSInitiator::MPSInitiator(const Name& prefix, KeyChain& keyChain, Face& face, Scheduler& scheduler)
   : m_prefix(prefix)
     , m_keyChain(keyChain)
@@ -43,6 +28,9 @@ struct MultiSignGlobalState
   Data m_toBeSigned;
   Data m_signInfo;
   std::vector<Buffer> m_fetchedSignatures;
+  SignatureFinishCallback m_successCb;
+  SignatureFailureCallback m_failureCb;
+  Name m_signingKeyName;
 };
 
 struct MultiSignPerSignerState
@@ -158,9 +146,7 @@ parseResultData(const Data& data, std::shared_ptr<MultiSignPerSignerState> perSi
 }
 
 void
-MPSInitiator::performRPC(const Name& signerKeyName, const Name& signingKeyName,
-                         const SignatureFinishCallback& successCb, const SignatureFailureCallback& failureCb,
-                         std::shared_ptr<MultiSignGlobalState> globalState)
+MPSInitiator::performRPC(const Name& signerKeyName, std::shared_ptr<MultiSignGlobalState> globalState)
 {
   auto perSignerState = std::make_shared<MultiSignPerSignerState>();
   // prepare un-encrypted parameter data
@@ -188,11 +174,11 @@ MPSInitiator::performRPC(const Name& signerKeyName, const Name& signingKeyName,
   auto signRequestInt = prepareSignRequestInterest(signerKeyName.getPrefix(-2),
                                                    perSignerState->m_paraData.getName(),
                                                    perSignerState->m_ecdh.getSelfPubKey());
-  m_interestSigner.makeSignedInterest(signRequestInt, signingByKey(signingKeyName));
+  m_interestSigner.makeSignedInterest(signRequestInt, signingByKey(globalState->m_signingKeyName));
   std::cout << "\n\nInitiator: Send MPS Sign Interest to signer: " << signerKeyName.getPrefix(-2).toUri() << std::endl;
   m_face.expressInterest(
     signRequestInt,
-    [=, &successCb, &failureCb, &signingKeyName](const auto&, const auto& ackData)
+    [=](const auto&, const auto& ackData)
     {
       std::cout << "\n\nInitiator: Fetched ACK Data from signer: "
                 << ackData.getName().getPrefix(-3).toUri()
@@ -223,7 +209,7 @@ MPSInitiator::performRPC(const Name& signerKeyName, const Name& signingKeyName,
                 << perSignerState->m_paraData.getName().toUri() << std::endl;
 
       // set the scheduler to fetch the result
-      perSignerState->m_resultFetchCallback = [=, &successCb, &failureCb, &signingKeyName]()
+      perSignerState->m_resultFetchCallback = [=]()
       {
         std::cout << "\n\nInitiator: Send Interest for result Data from signer: "
                   << perSignerState->m_nextResultName.getPrefix(-3).toUri() << std::endl;
@@ -231,18 +217,18 @@ MPSInitiator::performRPC(const Name& signerKeyName, const Name& signingKeyName,
         Interest resultFetchInt(perSignerState->m_nextResultName);
         resultFetchInt.setCanBePrefix(true);
         resultFetchInt.setMustBeFresh(true);
-        m_interestSigner.makeSignedInterest(resultFetchInt, signingByKey(signingKeyName));
+        m_interestSigner.makeSignedInterest(resultFetchInt, signingByKey(globalState->m_signingKeyName));
         m_face.expressInterest(
           resultFetchInt,
-          [=, &successCb, &failureCb, &signingKeyName](const auto&, const auto& resultData)
+          [=](const auto&, const auto& resultData)
           {
             auto signerPrefix = resultData.getName().getPrefix(-5);
 
             std::cout << "\n\nInitiator: Fetched result Data from signer: "
                       << signerPrefix.toUri() << std::endl << resultData;
             if (!security::verifySignature(resultData, m_keyChain.getTpm(),
-                                          perSignerState->m_hmacSigningInfo.getSignerName(),
-                                          DigestAlgorithm::SHA256)) {
+                                           perSignerState->m_hmacSigningInfo.getSignerName(),
+                                           DigestAlgorithm::SHA256)) {
               std::cout << "Initiator: HMAC verification failed" << std::endl;
               return;
             }
@@ -254,38 +240,59 @@ MPSInitiator::performRPC(const Name& signerKeyName, const Name& signingKeyName,
               if (globalState->m_fetchedSignatures.size() ==
                   globalState->m_signers.m_signers.size()) {
                 // all signatures have been fetched
-                auto aggSignature = std::make_shared<Buffer>(
-                  ndnBLSAggregateSignature(globalState->m_fetchedSignatures));
+                auto aggSignature = std::make_shared<Buffer>(ndnBLSAggregateSignature(globalState->m_fetchedSignatures));
                 globalState->m_toBeSigned.setSignatureValue(aggSignature);
                 globalState->m_toBeSigned.wireEncode();
 
                 // prepare the signature info packet
                 globalState->m_signInfo.setContent(globalState->m_signers.wireEncode());
-                m_keyChain.sign(globalState->m_signInfo, signingByKey(signingKeyName));
+                m_keyChain.sign(globalState->m_signInfo, signingByKey(globalState->m_signingKeyName));
                 std::cout << "Initiator: info packet is ready" << std::endl;
 
                 // end the multiparty signature
-                successCb(globalState->m_toBeSigned, globalState->m_signInfo);
+                globalState->m_successCb(globalState->m_toBeSigned, globalState->m_signInfo);
               }
             }
             else if (code != "102") {
-              failureCb("Failure fetching signature value from the signer " + signerPrefix.toUri());
+              globalState->m_failureCb("Failure fetching signature value from the signer " + signerPrefix.toUri());
             }
             else {
               // processing
               auto result_ms = time::milliseconds(readNonNegativeInteger(resultContentBlock.get(tlv::ResultAfter)));
               Name newResultName(resultContentBlock.get(tlv::ResultName).blockFromValue());
-              perSignerState->m_resultFetchHandle = m_scheduler.schedule(result_ms, perSignerState->m_resultFetchCallback);
+              perSignerState->m_resultFetchHandle = m_scheduler.schedule(result_ms,
+                                                                         perSignerState->m_resultFetchCallback);
             }
           },
-          std::bind(&onNack, _1, _2, failureCb),
-          std::bind(&onTimeout, _1, failureCb));
+          [=](const Interest& interest, const lp::Nack& nack)
+          {
+            NDN_LOG_ERROR("Received NACK with reason " << nack.getReason() << " for " << interest.getName());
+            globalState->m_failureCb(
+              "Received NACK with reason " + std::to_string(static_cast<int>(nack.getReason())) + " for " +
+              interest.getName().toUri());
+          },
+          [=](const Interest& interest)
+          {
+            NDN_LOG_ERROR("interest time out for " << interest.getName());
+            globalState->m_failureCb("interest time out for " + interest.getName().toUri());
+          }
+        );
       };
       perSignerState->m_resultFetchHandle = m_scheduler.schedule(result_ms, perSignerState->m_resultFetchCallback);
     },
-    std::bind(&onNack, _1, _2, failureCb),
-    std::bind(&onTimeout, _1, failureCb));
-
+    [=](const Interest& interest, const lp::Nack& nack)
+    {
+      NDN_LOG_ERROR("Received NACK with reason " << nack.getReason() << " for " << interest.getName());
+      globalState->m_failureCb(
+        "Received NACK with reason " + std::to_string(static_cast<int>(nack.getReason())) + " for " +
+        interest.getName().toUri());
+    },
+    [=](const Interest& interest)
+    {
+      NDN_LOG_ERROR("interest time out for " << interest.getName());
+      globalState->m_failureCb("interest time out for " + interest.getName().toUri());
+    }
+  );
 }
 
 void
@@ -294,6 +301,9 @@ MPSInitiator::multiPartySign(const Data& unsignedData, const MultipartySchema& s
 {
   // init global state
   auto globalState = std::make_shared<MultiSignGlobalState>();
+  globalState->m_successCb = successCb;
+  globalState->m_failureCb = failureCb;
+  globalState->m_signingKeyName = signingKeyName;
   // get signer list
   globalState->m_signers = m_schemaContainer.getAvailableSigners(schema);
   if (globalState->m_signers.m_signers.size() == 0) {
@@ -305,7 +315,7 @@ MPSInitiator::multiPartySign(const Data& unsignedData, const MultipartySchema& s
 
   for (const Name& signerKeyName : globalState->m_signers.m_signers) {
     // perform RPC with each signer
-    performRPC(signerKeyName, signingKeyName, successCb, failureCb, globalState);
+    performRPC(signerKeyName, globalState);
   }
 }
 
