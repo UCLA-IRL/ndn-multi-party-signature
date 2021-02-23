@@ -117,9 +117,9 @@ public:
    * @param signers The existing list and will be renewed.
    * @param unavailableKey The key name of the unavailable signer.
    * @param schema The schema.
-   * @return nonempty MpsSignerList if there is an available replacement of the unavailable key.
+   * @return nonempty MpsSignerList and a diff name list if there is an available replacement of the unavailable key.
    */
-  MpsSignerList
+  std::tuple<MpsSignerList, std::vector<Name>>
   replaceSigner(const MpsSignerList& signers, const Name& unavailableKey, const MultipartySchema& schema) const;
 
   BLSPublicKey

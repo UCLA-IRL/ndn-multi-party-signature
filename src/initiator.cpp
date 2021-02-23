@@ -25,6 +25,7 @@ MPSInitiator::MPSInitiator(const Name& prefix, KeyChain& keyChain, Face& face, S
 struct MultiSignGlobalState
 {
   MpsSignerList m_signers;
+  MultipartySchema m_schema;
   Data m_toBeSigned;
   Data m_signInfo;
   std::vector<Buffer> m_fetchedSignatures;
@@ -35,6 +36,7 @@ struct MultiSignGlobalState
 
 struct MultiSignPerSignerState
 {
+  Name m_signerKeyName;
   ECDHState m_ecdh;
   std::promise<Data> m_paraDataPromise;
   std::array<uint8_t, 16> m_aesKey;
@@ -149,6 +151,7 @@ void
 MPSInitiator::performRPC(const Name& signerKeyName, std::shared_ptr<MultiSignGlobalState> globalState)
 {
   auto perSignerState = std::make_shared<MultiSignPerSignerState>();
+  perSignerState->m_signerKeyName = signerKeyName;
   // prepare un-encrypted parameter data
   perSignerState->m_paraData = prepareParameterData(globalState->m_toBeSigned, m_prefix);
   // prepare a future for finalized parameter data
@@ -244,7 +247,8 @@ MPSInitiator::performRPC(const Name& signerKeyName, std::shared_ptr<MultiSignGlo
                 auto aggSignature = std::make_shared<Buffer>(
                   ndnBLSAggregateSignature(globalState->m_fetchedSignatures));
                 auto end = std::chrono::steady_clock::now();
-                std::cout << "Initiator aggregating signature pieces of size" << globalState->m_fetchedSignatures.size() << ": "
+                std::cout << "Initiator aggregating signature pieces of size" << globalState->m_fetchedSignatures.size()
+                          << ": "
                           << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count()
                           << "[µs]" << std::endl;
                 globalState->m_toBeSigned.setSignatureValue(aggSignature);
@@ -273,14 +277,12 @@ MPSInitiator::performRPC(const Name& signerKeyName, std::shared_ptr<MultiSignGlo
           [=](const Interest& interest, const lp::Nack& nack)
           {
             NDN_LOG_ERROR("Received NACK with reason " << nack.getReason() << " for " << interest.getName());
-            globalState->m_failureCb(
-              "Received NACK with reason " + std::to_string(static_cast<int>(nack.getReason())) + " for " +
-              interest.getName().toUri());
+            onUnavailableSigner(perSignerState->m_signerKeyName, globalState);
           },
           [=](const Interest& interest)
           {
             NDN_LOG_ERROR("interest time out for " << interest.getName());
-            globalState->m_failureCb("interest time out for " + interest.getName().toUri());
+            onUnavailableSigner(perSignerState->m_signerKeyName, globalState);
           }
         );
       };
@@ -289,14 +291,12 @@ MPSInitiator::performRPC(const Name& signerKeyName, std::shared_ptr<MultiSignGlo
     [=](const Interest& interest, const lp::Nack& nack)
     {
       NDN_LOG_ERROR("Received NACK with reason " << nack.getReason() << " for " << interest.getName());
-      globalState->m_failureCb(
-        "Received NACK with reason " + std::to_string(static_cast<int>(nack.getReason())) + " for " +
-        interest.getName().toUri());
+      onUnavailableSigner(perSignerState->m_signerKeyName, globalState);
     },
     [=](const Interest& interest)
     {
       NDN_LOG_ERROR("interest time out for " << interest.getName());
-      globalState->m_failureCb("interest time out for " + interest.getName().toUri());
+      onUnavailableSigner(perSignerState->m_signerKeyName, globalState);
     }
   );
 }
@@ -307,6 +307,7 @@ MPSInitiator::multiPartySign(const Data& unsignedData, const MultipartySchema& s
 {
   // init global state
   auto globalState = std::make_shared<MultiSignGlobalState>();
+  globalState->m_schema = schema;
   globalState->m_successCb = successCb;
   globalState->m_failureCb = failureCb;
   globalState->m_signingKeyName = signingKeyName;
@@ -322,6 +323,25 @@ MPSInitiator::multiPartySign(const Data& unsignedData, const MultipartySchema& s
   for (const Name& signerKeyName : globalState->m_signers.m_signers) {
     // perform RPC with each signer
     performRPC(signerKeyName, globalState);
+  }
+}
+
+void
+MPSInitiator::onUnavailableSigner(const Name& unavailbleSignerKeyName, std::shared_ptr<MultiSignGlobalState> globalState)
+{
+  MpsSignerList newSigners;
+  std::vector<Name> diffSigners;
+  std::tie(newSigners, diffSigners) = m_schemaContainer.replaceSigner(globalState->m_signers,
+                                                                      unavailbleSignerKeyName,
+                                                                      globalState->m_schema);
+  if (newSigners.m_signers.empty()) {
+    globalState->m_failureCb("We cannot find replacements for the unavailable signer");
+  }
+  else {
+    globalState->m_signers = newSigners;
+    for (const auto& item : diffSigners) {
+      performRPC(item, globalState);
+    }
   }
 }
 

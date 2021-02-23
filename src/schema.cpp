@@ -254,11 +254,14 @@ MultipartySchemaContainer::aggregateKey(const MpsSignerList& signers) const
   return aggKey;
 }
 
-MpsSignerList
-MultipartySchemaContainer::replaceSigner(const MpsSignerList& signers, const Name& unavailableKey, const MultipartySchema& schema) const
+std::tuple<MpsSignerList, std::vector<Name>>
+MultipartySchemaContainer::replaceSigner(const MpsSignerList& signers,
+                                         const Name& unavailableKey,
+                                         const MultipartySchema& schema) const
 {
   std::set<Name> newResultSet(signers.m_signers.begin(), signers.m_signers.end());
   newResultSet.erase(unavailableKey);
+  std::set<Name> diffSet;
 
   // find the corresponding required signer schema that matches the unavailable name
   std::vector<WildCardName> possiblyBrokenPattern;
@@ -287,16 +290,18 @@ MultipartySchemaContainer::replaceSigner(const MpsSignerList& signers, const Nam
     for (const auto& matchedKey : matchedKeys) {
       if (matchedKey != unavailableKey) {
         newResultSet.insert(matchedKey);
+        diffSet.insert(matchedKey);
         findReplacement = true;
         break;
       }
     }
     if (!findReplacement) {
       // Schema container does not have sufficient keys that are available
-      return MpsSignerList();
+      return std::make_tuple(MpsSignerList(), std::vector<Name>());
     }
   }
-  return MpsSignerList(std::vector<Name>(newResultSet.begin(), newResultSet.end()));
+  return std::make_tuple(MpsSignerList(std::vector<Name>(newResultSet.begin(), newResultSet.end())),
+                         std::vector<Name>(diffSet.begin(), diffSet.end()));
 }
 
 std::vector<Name>

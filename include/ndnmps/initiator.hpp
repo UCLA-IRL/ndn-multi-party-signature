@@ -51,6 +51,9 @@ public:
 private:
   void
   performRPC(const Name& signerKeyName, std::shared_ptr<MultiSignGlobalState> globalState);
+
+  void
+  onUnavailableSigner(const Name& unavailbleSignerKeyName, std::shared_ptr<MultiSignGlobalState> globalState);
 };
 
 }  // namespace mps
