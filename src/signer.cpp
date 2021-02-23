@@ -141,13 +141,13 @@ BLSSigner::BLSSigner(const Name& prefix, Face& face, KeyChain& keyChain,
   // generate default key randomly
   ndnBLSInit();
   auto begin = std::chrono::steady_clock::now();
-  m_sk.init();
+  blsSecretKeySetByCSPRNG(&m_sk);
   auto end = std::chrono::steady_clock::now();
   std::cout << "Signer generating key pair: "
             << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count()
             << "[µs]" << std::endl;
   
-  m_sk.getPublicKey(m_pk);
+  blsGetPublicKey(&m_pk, &m_sk);
   if (m_keyName.empty()) {
     m_keyName = m_prefix;
     m_keyName.append("KEY").appendTimestamp();

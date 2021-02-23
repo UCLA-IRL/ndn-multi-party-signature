@@ -13,9 +13,9 @@ BOOST_AUTO_TEST_CASE(TestSignAndVerify)
   ndnBLSInit();
 
   BLSSecretKey sk;
-  sk.init();
+  blsSecretKeySetByCSPRNG(&sk);
   BLSPublicKey pk;
-  sk.getPublicKey(pk);
+  blsGetPublicKey(&pk, &sk);
 
   Data data;
   data.setName(Name("/a/b/c/d"));
@@ -40,8 +40,8 @@ BOOST_AUTO_TEST_CASE(TestSignAndAggregateVerify)
   BLSPublicKey pk;
   BLSSecretKey sk;
   for (int i = 0; i < 10; i++) {
-    sk.init();
-    sk.getPublicKey(pk);
+    blsSecretKeySetByCSPRNG(&sk);
+    blsGetPublicKey(&pk, &sk);
     sks.push_back(sk);
     pks.push_back(pk);
   }

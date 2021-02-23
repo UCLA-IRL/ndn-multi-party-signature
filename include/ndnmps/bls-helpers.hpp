@@ -6,7 +6,7 @@
 #define BLS_ETH
 
 #include <bls/bls384_256.h>
-#include <bls/bls.hpp>
+#include <bls/bls.h>
 
 #include <iostream>
 #include <map>
@@ -14,9 +14,9 @@
 namespace ndn {
 namespace mps {
 
-using BLSSecretKey = bls::SecretKey;
-using BLSPublicKey = bls::PublicKey;
-using BLSSignature = bls::Signature;
+using BLSSecretKey = blsSecretKey;
+using BLSPublicKey = blsPublicKey;
+using BLSSignature = blsSignature;
 
 void
 ndnBLSInit();

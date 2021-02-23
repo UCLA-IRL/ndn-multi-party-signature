@@ -5,6 +5,7 @@ namespace ndn {
 namespace mps {
 
 static bool HAS_BLS_INITIALIZED = false;
+uint8_t encodingBuf[128];
 
 void
 ndnBLSInit()
@@ -27,10 +28,12 @@ ndnGenBLSSignature(const BLSSecretKey& signingKey, const Data& dataWithInfo)
   {
     EncodingBuffer encoder;
     dataWithInfo.wireEncode(encoder, true);
-    signingKey.sign(sig, encoder.buf(), encoder.size());
+    blsSign(&sig, &signingKey, encoder.buf(), encoder.size());
   }
-  auto sigStr = sig.getStr();
-  return Buffer(sigStr.data(), sigStr.size());
+  auto sigSize = blsSignatureSerialize(encodingBuf, sizeof(encodingBuf), &sig);
+  std::cout << "pub key size: " << blsGetSerializedPublicKeyByteSize() << std::endl
+            << "sig size: " << blsGetSerializedSignatureByteSize() << std::endl;
+  return Buffer(encodingBuf, sigSize);
 }
 
 Buffer
@@ -65,10 +68,10 @@ ndnGenBLSSignature(const BLSSecretKey& signingKey, const Interest& interest)
     for (const auto& bufPiece : discontiguousBuf) {
       contiguousBuf.insert(contiguousBuf.end(), bufPiece.first, bufPiece.first + bufPiece.second);
     }
-    signingKey.sign(sig, contiguousBuf.data(), contiguousBuf.size());
+    blsSign(&sig, &signingKey, contiguousBuf.data(), contiguousBuf.size());
   }
-  auto sigStr = sig.getStr();
-  return Buffer(sigStr.data(), sigStr.size());
+  auto sigSize = blsSignatureSerialize(encodingBuf, sizeof(encodingBuf), &sig);
+  return Buffer(encodingBuf, sigSize);
 }
 
 void
@@ -120,9 +123,9 @@ genSelfSignedCertificate(const Name& keyName,
   Name certName = keyName;
   certName.append("self").append(std::to_string(random::generateSecureWord64()));
   newCert.setName(certName);
-  auto pubKeyStr = pubKey.getStr();
+  auto pubKeySize = blsPublicKeySerialize(encodingBuf, sizeof(encodingBuf), &pubKey);
   newCert.setContentType(ndn::tlv::ContentType_Key);
-  newCert.setContent(reinterpret_cast<const uint8_t*>(pubKeyStr.data()), pubKeyStr.size());
+  newCert.setContent(encodingBuf, pubKeySize);
   SignatureInfo signatureInfo(static_cast<ndn::tlv::SignatureTypeValue>(tlv::SignatureSha256WithBls),
                               KeyLocator(keyName));
   signatureInfo.setValidityPeriod(period);
@@ -136,15 +139,14 @@ ndnBLSVerify(const BLSPublicKey& pubKey, const Data& data)
   // get signature value
   const auto& sigValue = data.getSignatureValue();
   BLSSignature sig;
-  std::string sigStr(reinterpret_cast<const char*>(sigValue.value()), sigValue.value_size());
-  sig.setStr(sigStr);
+  blsSignatureDeserialize(&sig, sigValue.value(), sigValue.value_size());
   // verify
   auto discontiguousBuf = data.extractSignedRanges();
   Buffer contiguousBuf;
   for (const auto& bufPiece : discontiguousBuf) {
     contiguousBuf.insert(contiguousBuf.end(), bufPiece.first, bufPiece.first + bufPiece.second);
   }
-  return sig.verify(pubKey, contiguousBuf.data(), contiguousBuf.size());
+  return blsVerify(&sig, &pubKey, contiguousBuf.data(), contiguousBuf.size()) == 1;
 }
 
 bool
@@ -152,7 +154,7 @@ ndnBLSVerify(const std::vector<BLSPublicKey>& pubKeys, const Data& data)
 {
   BLSPublicKey aggKey = pubKeys[0];
   for (size_t i = 1; i < pubKeys.size(); i++) {
-    aggKey.add(pubKeys[i]);
+    blsPublicKeyAdd(&aggKey, &pubKeys[i]);
   }
   return ndnBLSVerify(aggKey, data);
 }
@@ -166,15 +168,14 @@ ndnBLSVerify(const BLSPublicKey& pubKey, const Interest& interest)
   // get signature value
   const auto& sigValue = interest.getSignatureValue();
   BLSSignature sig;
-  std::string sigStr(reinterpret_cast<const char*>(sigValue.value()), sigValue.value_size());
-  sig.setStr(sigStr);
+  blsSignatureDeserialize(&sig, sigValue.value(), sigValue.value_size());
   // verify
   auto discontiguousBuf = interest.extractSignedRanges();
   Buffer contiguousBuf;
   for (const auto& bufPiece : discontiguousBuf) {
     contiguousBuf.insert(contiguousBuf.end(), bufPiece.first, bufPiece.first + bufPiece.second);
   }
-  return sig.verify(pubKey, contiguousBuf.data(), contiguousBuf.size());
+  return blsVerify(&sig, &pubKey, contiguousBuf.data(), contiguousBuf.size()) == 1;
 }
 
 bool
@@ -189,7 +190,7 @@ ndnBLSAggregatePublicKey(const std::vector<BLSPublicKey>& pubKeys)
 {
   BLSPublicKey aggKey = pubKeys[0];
   for (size_t i = 1; i < pubKeys.size(); i++) {
-    aggKey.add(pubKeys[i]);
+    blsPublicKeyAdd(&aggKey, &pubKeys[i]);
   }
   return aggKey;
 }
@@ -198,16 +199,14 @@ Buffer
 ndnBLSAggregateSignature(const std::vector<Buffer>& signatures)
 {
   BLSSignature aggSig;
-  std::string sigStr(reinterpret_cast<const char*>(signatures[0].data()), signatures[0].size());
-  aggSig.setStr(sigStr);
+  blsSignatureDeserialize(&aggSig, signatures[0].data(), signatures[0].size());
   BLSSignature tempSig;
   for (size_t i = 1; i < signatures.size(); i++) {
-    sigStr = std::string(reinterpret_cast<const char*>(signatures[i].data()), signatures[i].size());
-    tempSig.setStr(sigStr);
-    aggSig.add(tempSig);
+    blsSignatureDeserialize(&tempSig, signatures[i].data(), signatures[i].size());
+    blsSignatureAdd(&aggSig, &tempSig);
   }
-  sigStr = aggSig.getStr();
-  return Buffer(sigStr.data(), sigStr.size());
+  auto sigSize = blsSignatureSerialize(encodingBuf, sizeof(encodingBuf), &aggSig);
+  return Buffer(encodingBuf, sigSize);
 }
 
 BLSSignature
@@ -215,7 +214,7 @@ ndnBLSAggregateSignature(const std::vector<BLSSignature>& signatures)
 {
   BLSSignature aggSig = signatures[0];
   for (size_t i = 1; i < signatures.size(); i++) {
-    aggSig.add(signatures[i]);
+    blsSignatureAdd(&aggSig, &signatures[i]);
   }
   return aggSig;
 }

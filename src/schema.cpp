@@ -244,7 +244,7 @@ MultipartySchemaContainer::aggregateKey(const MpsSignerList& signers) const
         init = true;
       }
       else {
-        aggKey.add(m_trustedIds.at(item));
+        blsPublicKeyAdd(&aggKey, &m_trustedIds.at(item));
       }
     }
     else {
