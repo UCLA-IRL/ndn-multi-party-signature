@@ -31,8 +31,6 @@ ndnGenBLSSignature(const BLSSecretKey& signingKey, const Data& dataWithInfo)
     blsSign(&sig, &signingKey, encoder.buf(), encoder.size());
   }
   auto sigSize = blsSignatureSerialize(encodingBuf, sizeof(encodingBuf), &sig);
-  std::cout << "pub key size: " << blsGetSerializedPublicKeyByteSize() << std::endl
-            << "sig size: " << blsGetSerializedSignatureByteSize() << std::endl;
   return Buffer(encodingBuf, sigSize);
 }
 

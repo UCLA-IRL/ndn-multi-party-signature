@@ -127,6 +127,77 @@ BOOST_AUTO_TEST_CASE(MultipleSigner)
   BOOST_CHECK(verifier.verify(signedData, infoData));
 }
 
+BOOST_AUTO_TEST_CASE(SignerReplacement)
+  {
+    util::DummyClientFace face(io, m_keyChain, { true, true });
+  util::DummyClientFace anotherFace(io, m_keyChain, { true, true });
+
+  // signers
+  std::vector<std::unique_ptr<BLSSigner>> signers;
+  for (size_t i = 0; i < 5; i++) {
+    std::string prefix = "/signer" + std::to_string(i + 1);
+    if (i == 3) {
+      // make /signer4/KEY/123 unavailable
+      signers.emplace_back(std::make_unique<BLSSigner>(Name(prefix), anotherFace, m_keyChain, Name(prefix + "/KEY/123")));
+    }
+    else {
+      signers.emplace_back(std::make_unique<BLSSigner>(Name(prefix), face, m_keyChain, Name(prefix + "/KEY/123")));
+    }
+  }
+  advanceClocks(time::milliseconds(20), 10);
+
+  // initiator
+  auto initiatorId = addIdentity("initiator");
+  Scheduler scheduler(io);
+  MPSInitiator initiator(Name("/initiator"), m_keyChain, face, scheduler);
+  for (size_t i = 0; i < 5; i++) {
+    initiator.m_schemaContainer.m_trustedIds.emplace(signers[i]->getPublicKeyName(), signers[i]->getPublicKey());
+  }
+  advanceClocks(time::milliseconds(20), 10);
+
+  // verifier
+  BLSVerifier verifier(face);
+
+  // schema
+  MultipartySchema schema;
+  schema.m_pktName = WildCardName("/a/b/_");
+  schema.m_ruleId = "01";
+  schema.m_signers.emplace_back(Name("/signer1/KEY/123"));
+  schema.m_signers.emplace_back(Name("/signer2/KEY/123"));
+  schema.m_minOptionalSigners = 2;
+  schema.m_optionalSigners.emplace_back(Name("/signer3/KEY/123"));
+  schema.m_optionalSigners.emplace_back(Name("/signer4/KEY/123"));
+  schema.m_optionalSigners.emplace_back(Name("/signer5/KEY/123"));
+  initiator.m_schemaContainer.m_schemas.push_back(schema);
+
+  // data to sign
+  Data unsignedData;
+  unsignedData.setName(Name("/a/b/c"));
+  unsignedData.setContent(Name("/1/2/3/4").wireEncode());
+
+  // start protocol
+  bool callbackInvoked = false;
+  Data signedData, infoData;
+  initiator.multiPartySign(unsignedData, schema, initiatorId.getDefaultKey().getName(),
+  [&](const auto& d1, const auto& d2) {
+    callbackInvoked = true;
+    signedData = d1;
+    infoData = d2;
+  },
+  [](const auto& reason) {
+    std::cout << "FAILURE REASON: " << reason << std::endl;
+    BOOST_CHECK(false);
+  });
+  advanceClocks(time::milliseconds(200), 30);
+  BOOST_CHECK(callbackInvoked);
+  BOOST_CHECK(!verifier.verify(signedData, infoData));
+  verifier.m_schemaContainer.m_schemas.push_back(schema);
+  for (size_t i = 0; i < 5; i++) {
+    verifier.m_schemaContainer.m_trustedIds.emplace(signers[i]->getPublicKeyName(), signers[i]->getPublicKey());
+  }
+  BOOST_CHECK(verifier.verify(signedData, infoData));
+  }
+
 // BOOST_AUTO_TEST_CASE(VerifierFetch)
 // {
 //   util::DummyClientFace face(io, m_keyChain, {true, true});

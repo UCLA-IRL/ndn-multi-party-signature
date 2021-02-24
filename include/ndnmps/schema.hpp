@@ -14,16 +14,15 @@ namespace mps {
  * A class to store wild card name that can wildcard match other names.
  * We use generic component with string "_" as a wildcard of the component.
  */
-class WildCardName : public Name {
+class WildCardName {
 public:
-
   /**
    * The constructor of the wild card name.
    */
   WildCardName() = default;
   WildCardName(const Name& format);
   WildCardName(const std::string& str);
-  WildCardName(const char * str);
+  WildCardName(const char* str);
   WildCardName(const Block& block);
 
   /**
@@ -33,10 +32,51 @@ public:
    */
   bool
   match(const Name& name) const;
+
+  std::string
+  toUri() const {
+    return m_name.toUri();
+  }
+
+public:
+  Name m_name;
+  size_t m_times;
 };
 
 /**
  * @brief configuration file to guide signing and verification.
+ *
+ * In the ideal case, the names listed in the configuration file should be as specific as possible.
+ * E.g., /example/specific/name/KEY/_
+ *
+ * When using wildcard _ in the identity name. Our schema supports the use of nx prefix.
+ *
+ * Each required name will match one key if nx prefix is not specified.
+ * nx prefix means "n names must be found to satisfy the schema"
+ * Example:
+ * all-of {
+ *  3x/A/_
+ *  /B/_
+ * }
+ * In this case, the schema will match three different key names that can match /A/_ and one key that can match /B/_
+ *
+ * As for optional signer names, the at-least-num refers to the total number of matched keys instead of item numbers.
+ * nx prefix means "at most n names can be used to fulfill the need of at-least-num"
+ * Example:
+ * at-least-num = 3
+ * at-least {
+ *  2x/A/_
+ *  2x/B/_
+ * }
+ * In this case, the schema will match 3 keys (2 for /A/_, 1 for /B/_) instead of 4.
+ *
+ * It's better to avoid overlapping wildcard names.
+ * Example:
+ * all-of {
+ *  2x/A/B/_
+ *  3x/A/_/_
+ * }
+ * In this case, it is possible to match totally 3 keys instead of 5 keys
  */
 class MultipartySchema {
 public:
@@ -88,7 +128,7 @@ public:
    * @return true if the locator satisifies this schema
    */
   bool
-  passSchema(const MpsSignerList& signers) const;
+  passSchema(const std::vector<Name>& signers) const;
 };
 
 class MultipartySchemaContainer
@@ -96,6 +136,7 @@ class MultipartySchemaContainer
 public:
   std::list<MultipartySchema> m_schemas;
   std::map<Name, BLSPublicKey> m_trustedIds; // keyName, keyBits
+  mutable std::set<Name> m_unavailableSigners; // a temporary state showing which signers are unavailable
 
 public:
   void
@@ -125,6 +166,11 @@ public:
   BLSPublicKey
   aggregateKey(const MpsSignerList& signers) const;
 
+  void
+  resetCachedUnavailableSigners() const {
+    m_unavailableSigners.clear();
+  }
+
 private:
   /**
    * @brief Try get a matched key from the truste IDs
@@ -133,6 +179,9 @@ private:
    */
   std::vector<Name>
   getMatchedKeys(const WildCardName& pattern) const;
+
+  std::tuple<bool, Name>
+  findANewKeyForPattern(const std::set<Name>& existingSigners, WildCardName pattern) const;
 };
 
 }  // namespace mps

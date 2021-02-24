@@ -2,13 +2,13 @@ pkt-name /example/data
 rule-id rule1
 all-of
 {
-  "" /example/a/KEY/_/_
-  "" /example/b/KEY/_/_
+  "" 3x/example/a/KEY/_
+  "" /example/b/KEY/_
 }
 at-least-num 2
 at-least
 {
-  "" /example/c/KEY/_/_
-  "" /example/d/KEY/_/_
-  "" /example/e/KEY/_/_
+  "" /example/c/KEY/_
+  "" /example/d/KEY/_
+  "" /example/e/KEY/_
 }

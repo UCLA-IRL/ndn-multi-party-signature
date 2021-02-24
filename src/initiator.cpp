@@ -264,7 +264,8 @@ MPSInitiator::performRPC(const Name& signerKeyName, std::shared_ptr<MultiSignGlo
               }
             }
             else if (code != "102") {
-              globalState->m_failureCb("Failure fetching signature value from the signer " + signerPrefix.toUri());
+              onUnavailableSigner("Received Error code when requesting signer " + perSignerState->m_signerKeyName.getPrefix(-2).toUri(),
+                                  perSignerState->m_signerKeyName, globalState);
             }
             else {
               // processing
@@ -277,12 +278,14 @@ MPSInitiator::performRPC(const Name& signerKeyName, std::shared_ptr<MultiSignGlo
           [=](const Interest& interest, const lp::Nack& nack)
           {
             NDN_LOG_ERROR("Received NACK with reason " << nack.getReason() << " for " << interest.getName());
-            onUnavailableSigner(perSignerState->m_signerKeyName, globalState);
+            onUnavailableSigner("Received NACK when requesting signer " + perSignerState->m_signerKeyName.getPrefix(-2).toUri(),
+                                perSignerState->m_signerKeyName, globalState);
           },
           [=](const Interest& interest)
           {
             NDN_LOG_ERROR("interest time out for " << interest.getName());
-            onUnavailableSigner(perSignerState->m_signerKeyName, globalState);
+            onUnavailableSigner("Interest timeout when requesting signer " + perSignerState->m_signerKeyName.getPrefix(-2).toUri(),
+                                perSignerState->m_signerKeyName, globalState);
           }
         );
       };
@@ -291,12 +294,14 @@ MPSInitiator::performRPC(const Name& signerKeyName, std::shared_ptr<MultiSignGlo
     [=](const Interest& interest, const lp::Nack& nack)
     {
       NDN_LOG_ERROR("Received NACK with reason " << nack.getReason() << " for " << interest.getName());
-      onUnavailableSigner(perSignerState->m_signerKeyName, globalState);
+      onUnavailableSigner("Received NACK when requesting signer " + perSignerState->m_signerKeyName.getPrefix(-2).toUri(),
+                          perSignerState->m_signerKeyName, globalState);
     },
     [=](const Interest& interest)
     {
-      NDN_LOG_ERROR("interest time out for " << interest.getName());
-      onUnavailableSigner(perSignerState->m_signerKeyName, globalState);
+      NDN_LOG_ERROR("Interest time out for " << interest.getName());
+      onUnavailableSigner("Interest timeout when requesting signer " + perSignerState->m_signerKeyName.getPrefix(-2).toUri(),
+                          perSignerState->m_signerKeyName, globalState);
     }
   );
 }
@@ -327,7 +332,9 @@ MPSInitiator::multiPartySign(const Data& unsignedData, const MultipartySchema& s
 }
 
 void
-MPSInitiator::onUnavailableSigner(const Name& unavailbleSignerKeyName, std::shared_ptr<MultiSignGlobalState> globalState)
+MPSInitiator::onUnavailableSigner(const std::string& reason,
+                                  const Name& unavailbleSignerKeyName,
+                                  std::shared_ptr<MultiSignGlobalState> globalState)
 {
   MpsSignerList newSigners;
   std::vector<Name> diffSigners;
@@ -335,7 +342,7 @@ MPSInitiator::onUnavailableSigner(const Name& unavailbleSignerKeyName, std::shar
                                                                       unavailbleSignerKeyName,
                                                                       globalState->m_schema);
   if (newSigners.m_signers.empty()) {
-    globalState->m_failureCb("We cannot find replacements for the unavailable signer");
+    globalState->m_failureCb(reason + " And we cannot find replacements for the unavailable signer");
   }
   else {
     globalState->m_signers = newSigners;

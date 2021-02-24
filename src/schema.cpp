@@ -26,6 +26,50 @@ parseAssert(bool criterion)
   }
 }
 
+WildCardName::WildCardName(const Name& format)
+  : m_name(format)
+  , m_times(1)
+{
+}
+
+WildCardName::WildCardName(const char* str)
+  : WildCardName(std::string(str))
+{}
+
+WildCardName::WildCardName(const std::string& str)
+{
+  auto xPos = str.find('x');
+  auto slashPos = str.find('/');
+  m_name = Name(str.substr(slashPos));
+  if (xPos < slashPos) {
+    try {
+      m_times = std::stoi(str);
+    }
+    catch (const std::exception& e) {
+      m_times = 1;
+    }
+  }
+}
+
+WildCardName::WildCardName(const Block& block)
+  : m_name(block)
+  , m_times(1)
+{
+}
+
+bool
+WildCardName::match(const Name& name) const
+{
+  if (m_name.size() != name.size())
+    return false;
+  for (int i = 0; i < m_name.size(); i++) {
+    if (readString(m_name.get(i)) != "_" && readString(m_name.get(i)) != readString(name.get(i))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 MultipartySchema
 fromSchemaSection(const SchemaSection& config)
 {
@@ -49,39 +93,6 @@ fromSchemaSection(const SchemaSection& config)
     }
   }
   return schema;
-}
-
-WildCardName::WildCardName(const Name& format)
-    : Name(format)
-{
-}
-
-WildCardName::WildCardName(const std::string& str)
-    : Name(str)
-{
-}
-
-WildCardName::WildCardName(const char* str)
-    : Name(str)
-{
-}
-
-WildCardName::WildCardName(const Block& block)
-    : Name(block)
-{
-}
-
-bool
-WildCardName::match(const Name& name) const
-{
-  if (this->size() != name.size())
-    return false;
-  for (int i = 0; i < size(); i++) {
-    if (readString(this->get(i)) != "_" && readString(this->get(i)) != readString(name.get(i))) {
-      return false;
-    }
-  }
-  return true;
 }
 
 MultipartySchema
@@ -152,37 +163,35 @@ MultipartySchema::toString()
 }
 
 bool
-MultipartySchema::passSchema(const MpsSignerList& signers) const
+MultipartySchema::passSchema(const std::vector<Name>& signers) const
 {
   // make sure all required signers are listed
-  bool found = false;
-  for (const auto& requiredSigner : m_signers) {
-    found = false;
-    for (const auto& item : signers.m_signers) {
-      if (requiredSigner.match(item)) {
-        found = true;
-        break;
+  size_t count = 0;
+  for (const auto& pattern : m_signers) {
+    count = 0;
+    for (const auto& item : signers) {
+      if (pattern.match(item)) {
+        count++;
       }
     }
-    if (!found) {
+    if (count < pattern.m_times) {
       return false;
     }
   }
   // check optional signers
-  size_t count = 0;
-  for (const auto& optionalSigner : m_optionalSigners) {
-    found = false;
-    for (const auto& item : signers.m_signers) {
-      if (optionalSigner.match(item)) {
-        found = true;
-        break;
+  size_t totalMatchedKeys = 0;
+  for (const auto& pattern : m_optionalSigners) {
+    count = 0;
+    for (const auto& item : signers) {
+      if (pattern.match(item)) {
+        count++;
       }
     }
-    if (found) {
-      count++;
+    if (count >= pattern.m_times) {
+      totalMatchedKeys += pattern.m_times;
     }
   }
-  if (count >= m_minOptionalSigners) {
+  if (totalMatchedKeys >= m_minOptionalSigners) {
     return true;
   }
   return false;
@@ -198,7 +207,7 @@ MultipartySchemaContainer::passSchema(const Name& packetName, const MpsSignerLis
   }
   for (const auto& schema : m_schemas) {
     if (schema.match(packetName)) {
-      return schema.passSchema(signers);
+      return schema.passSchema(signers.m_signers);
     }
   }
   return false;
@@ -210,17 +219,22 @@ MultipartySchemaContainer::getAvailableSigners(const MultipartySchema& schema) c
   std::set<Name> resultSet;
   for (const auto& pattern : schema.m_signers) {
     auto matchedKeys = getMatchedKeys(pattern);
-    if (matchedKeys.empty()) {
-      NDN_THROW(std::runtime_error("Schema container does not have sufficient keys. Missing key for " + pattern.toUri()));
+    if (matchedKeys.size() < pattern.m_times) {
+      NDN_THROW(std::runtime_error("Schema container does not have sufficient keys. Missing key(s) for " + pattern.toUri()));
     }
-    resultSet.insert(matchedKeys.front());
+    for (size_t i = 0; i < pattern.m_times; i++) {
+      resultSet.insert(matchedKeys[i]);
+    }
   }
   size_t count = 0;
   for (const auto& pattern : schema.m_optionalSigners) {
     auto matchedKeys = getMatchedKeys(pattern);
-    if (!matchedKeys.empty()) {
-      resultSet.insert(matchedKeys.front());
+    for (size_t i = 0; i < std::min(matchedKeys.size(), pattern.m_times); i++) {
+      resultSet.insert(matchedKeys[i]);
       count++;
+      if (count >= schema.m_minOptionalSigners) {
+        break;
+      }
     }
     if (count >= schema.m_minOptionalSigners) {
       break;
@@ -259,45 +273,41 @@ MultipartySchemaContainer::replaceSigner(const MpsSignerList& signers,
                                          const Name& unavailableKey,
                                          const MultipartySchema& schema) const
 {
+  m_unavailableSigners.insert(unavailableKey);
+
   std::set<Name> newResultSet(signers.m_signers.begin(), signers.m_signers.end());
   newResultSet.erase(unavailableKey);
   std::set<Name> diffSet;
+  bool findReplacement = false;
+  Name replacementName;
 
   // find the corresponding required signer schema that matches the unavailable name
-  std::vector<WildCardName> possiblyBrokenPattern;
   for (const auto& pattern : schema.m_signers) {
     if (pattern.match(unavailableKey)) {
-      possiblyBrokenPattern.push_back(pattern);
+      std::tie(findReplacement, replacementName) = findANewKeyForPattern(newResultSet, pattern);
+      if (findReplacement) {
+        if (!replacementName.empty()) {
+          newResultSet.insert(replacementName);
+          diffSet.insert(replacementName);
+        }
+      }
+      else {
+        // Schema container does not have sufficient keys that are available
+        return std::make_tuple(MpsSignerList(), std::vector<Name>());
+      }
     }
   }
   // find the corresponding optional signer schema that matches the unavailable name
   for (const auto& pattern : schema.m_optionalSigners) {
-    if (pattern.match(unavailableKey)) {
-      possiblyBrokenPattern.push_back(pattern);
+    std::tie(findReplacement, replacementName) = findANewKeyForPattern(newResultSet, pattern);
+    if (findReplacement && replacementName.empty()) {
+      continue;
     }
-  }
-  // find replacement
-  bool findReplacement = false;
-  for (const auto& brokenPattern : possiblyBrokenPattern) {
-    findReplacement = false;
-    for (const auto& existingKey : signers.m_signers) {
-      if (existingKey != unavailableKey && brokenPattern.match(existingKey)) {
-        findReplacement = true;
-        break;
-      }
-    }
-    auto matchedKeys = getMatchedKeys(brokenPattern);
-    for (const auto& matchedKey : matchedKeys) {
-      if (matchedKey != unavailableKey) {
-        newResultSet.insert(matchedKey);
-        diffSet.insert(matchedKey);
-        findReplacement = true;
-        break;
-      }
-    }
-    if (!findReplacement) {
-      // Schema container does not have sufficient keys that are available
-      return std::make_tuple(MpsSignerList(), std::vector<Name>());
+    if (findReplacement && !replacementName.empty()) {
+      // find a new matched name that has not been included yet
+      newResultSet.insert(replacementName);
+      diffSet.insert(replacementName);
+      break;
     }
   }
   return std::make_tuple(MpsSignerList(std::vector<Name>(newResultSet.begin(), newResultSet.end())),
@@ -309,11 +319,33 @@ MultipartySchemaContainer::getMatchedKeys(const WildCardName& pattern) const
 {
   std::set<Name> resultSet;
   for (const auto& item : m_trustedIds) {
-    if (pattern.match(item.first)) {
+    if (pattern.match(item.first) && m_unavailableSigners.count(item.first) == 0) {
       resultSet.insert(item.first);
     }
   }
   return std::vector<Name>(resultSet.begin(), resultSet.end());
+}
+
+std::tuple<bool, Name>
+MultipartySchemaContainer::findANewKeyForPattern(const std::set<Name>& existingSigners, WildCardName pattern) const
+{
+  size_t count = 0;
+  for (const auto& item : existingSigners) {
+    if (pattern.match(item)) {
+      count++;
+    }
+  }
+  if (count >= pattern.m_times) {
+    // no need to find replacement
+    return std::make_tuple(true, Name());
+  }
+  auto matchedKeys = getMatchedKeys(pattern);
+  for (const auto& matchedKey : matchedKeys) {
+    if (existingSigners.count(matchedKey) == 0) {
+      return std::make_tuple(true, matchedKey);
+    }
+  }
+  return std::make_tuple(false, Name());
 }
 
 }  // namespace mps
