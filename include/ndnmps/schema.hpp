@@ -40,7 +40,7 @@ public:
 
 public:
   Name m_name;
-  size_t m_times;
+  size_t m_times = 1;
 };
 
 /**

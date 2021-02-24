@@ -41,9 +41,9 @@ WildCardName::WildCardName(const std::string& str)
   auto xPos = str.find('x');
   auto slashPos = str.find('/');
   m_name = Name(str.substr(slashPos));
-  if (xPos < slashPos) {
+  if (xPos != std::string::npos && xPos < slashPos) {
     try {
-      m_times = std::stoi(str);
+      m_times = std::stoi(str.substr(0, xPos));
     }
     catch (const std::exception& e) {
       m_times = 1;
@@ -187,9 +187,7 @@ MultipartySchema::passSchema(const std::vector<Name>& signers) const
         count++;
       }
     }
-    if (count >= pattern.m_times) {
-      totalMatchedKeys += pattern.m_times;
-    }
+    totalMatchedKeys += std::min(count, pattern.m_times);
   }
   if (totalMatchedKeys >= m_minOptionalSigners) {
     return true;

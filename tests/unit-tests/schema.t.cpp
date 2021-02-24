@@ -100,7 +100,7 @@ BOOST_AUTO_TEST_CASE(SchemaWrite3)
   BOOST_CHECK_EQUAL(schema.m_minOptionalSigners, schema2.m_minOptionalSigners);
 }
 
-BOOST_AUTO_TEST_CASE(SchemaMinSigner)
+BOOST_AUTO_TEST_CASE(SchemaVerify)
 {
   MultipartySchema schema;
   schema.m_pktName.m_name = Name("/a/b/c");
@@ -108,8 +108,12 @@ BOOST_AUTO_TEST_CASE(SchemaMinSigner)
   schema.m_signers.emplace_back("/a");
   schema.m_signers.emplace_back("/b");
 
-  std::vector<Name> names;
+  BOOST_CHECK_EQUAL(schema.m_signers[0].m_name, Name("/a"));
+  BOOST_CHECK_EQUAL(schema.m_signers[1].m_name, Name("/b"));
+  BOOST_CHECK_EQUAL(schema.m_signers[0].m_times, 1);
+  BOOST_CHECK_EQUAL(schema.m_signers[1].m_times, 1);
 
+  std::vector<Name> names;
   BOOST_CHECK(!schema.passSchema(names));
   names.emplace_back("/a");
   BOOST_CHECK(!schema.passSchema(names));
@@ -167,6 +171,24 @@ BOOST_AUTO_TEST_CASE(SchemaMinSignerMultipleMatchPosition)
   names.emplace_back("/a/c");
   BOOST_CHECK(!schema.passSchema(names));
   names.emplace_back("/b/c");
+  BOOST_CHECK(schema.passSchema(names));
+}
+
+BOOST_AUTO_TEST_CASE(SchemaMinSignerWithPrefix)
+{
+  MultipartySchema schema;
+  schema.m_pktName.m_name = Name("/a/b/c");
+  schema.m_ruleId = "...";
+  schema.m_signers.emplace_back("2x/a/_");
+  schema.m_optionalSigners.emplace_back("3x/b/_");
+  schema.m_minOptionalSigners = 2;
+
+  std::vector<Name> names;
+  names.emplace_back("/a/b");
+  names.emplace_back("/b/c");
+  BOOST_CHECK(!schema.passSchema(names));
+  names.emplace_back("/a/c");
+  names.emplace_back("/b/d");
   BOOST_CHECK(schema.passSchema(names));
 }
 
