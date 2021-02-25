@@ -20,9 +20,8 @@ make
 Build with unit tests:
 
 ```bash
-mkdir build
-cd build
-cmake .. -DHAVE_TESTS=1
+mkdir build && cd build
+cmake -DHAVE_TESTS=1 -DCMAKE_BUILD_TYPE=Release .. 
 make
 ./unit-tests
 ```
@@ -32,8 +31,10 @@ make
 * [x] The crypto operations of players
 * [x] Encoding/decoding of BLS signature info and signature value
 * [x] Schema file parsing
-* [ ] Negotiation protocol
-* [ ] Verification
+* [x] Negotiation protocol
+* [x] Verification
+* [x] Replacement when some signers are not available
+* [ ] Load public key from files
 
 ## Contact
 
