@@ -18,6 +18,8 @@ const static std::string CONFIG_ALL_OF = "all-of";
 const static std::string CONFIG_AT_LEAST_NUM = "at-least-num";
 const static std::string CONFIG_AT_LEAST = "at-least";
 
+const static uint32_t WILDCARD_NAME_TYPE = ndn::tlv::NameComponentMax - 1;
+
 void
 parseAssert(bool criterion)
 {
@@ -28,7 +30,7 @@ parseAssert(bool criterion)
 
 WildCardName::WildCardName(const Name& format)
   : m_name(format)
-  , m_times(1)
+    , m_times(1)
 {
 }
 
@@ -40,7 +42,9 @@ WildCardName::WildCardName(const std::string& str)
 {
   auto xPos = str.find('x');
   auto slashPos = str.find('/');
-  m_name = Name(str.substr(slashPos));
+  if (slashPos == std::string::npos) {
+    NDN_THROW(std::runtime_error("Error: unrecognized wildcard name format."));
+  }
   if (xPos != std::string::npos && xPos < slashPos) {
     try {
       m_times = std::stoi(str.substr(0, xPos));
@@ -49,21 +53,42 @@ WildCardName::WildCardName(const std::string& str)
       m_times = 1;
     }
   }
+  std::string tempStr = str.substr(slashPos + 1);
+  std::string compStr;
+  slashPos = tempStr.find('/');
+  while (slashPos != std::string::npos) {
+    compStr = tempStr.substr(0, slashPos);
+    if (compStr == "*") {
+      m_name.append(Name::Component(WILDCARD_NAME_TYPE));
+    }
+    else {
+      m_name.append(Name::Component(compStr));
+    }
+    tempStr = tempStr.substr(slashPos + 1);
+    slashPos = tempStr.find('/');
+  }
+  if (tempStr == "*") {
+    m_name.append(Name::Component(WILDCARD_NAME_TYPE));
+  }
+  else {
+    m_name.append(Name::Component(tempStr));
+  }
 }
 
 WildCardName::WildCardName(const Block& block)
   : m_name(block)
-  , m_times(1)
+    , m_times(1)
 {
 }
 
 bool
 WildCardName::match(const Name& name) const
 {
-  if (m_name.size() != name.size())
+  if (m_name.size() != name.size()) {
     return false;
+  }
   for (int i = 0; i < m_name.size(); i++) {
-    if (readString(m_name.get(i)) != "_" && readString(m_name.get(i)) != readString(name.get(i))) {
+    if (m_name.get(i).type() != WILDCARD_NAME_TYPE && readString(m_name.get(i)) != readString(name.get(i))) {
       return false;
     }
   }
@@ -124,7 +149,7 @@ MultipartySchema::fromINFO(const std::string& fileOrConfigStr)
 }
 
 MultipartySchema::MultipartySchema()
-    : m_minOptionalSigners(0)
+  : m_minOptionalSigners(0)
 {
 }
 
@@ -218,7 +243,8 @@ MultipartySchemaContainer::getAvailableSigners(const MultipartySchema& schema) c
   for (const auto& pattern : schema.m_signers) {
     auto matchedKeys = getMatchedKeys(pattern);
     if (matchedKeys.size() < pattern.m_times) {
-      NDN_THROW(std::runtime_error("Schema container does not have sufficient keys. Missing key(s) for " + pattern.toUri()));
+      NDN_THROW(
+        std::runtime_error("Schema container does not have sufficient keys. Missing key(s) for " + pattern.toUri()));
     }
     for (size_t i = 0; i < pattern.m_times; i++) {
       resultSet.insert(matchedKeys[i]);

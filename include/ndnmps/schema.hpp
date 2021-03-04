@@ -12,7 +12,7 @@ namespace mps {
 
 /**
  * A class to store wild card name that can wildcard match other names.
- * We use generic component with string "_" as a wildcard of the component.
+ * We use generic component with string "*" as a wildcard of the component.
  */
 class WildCardName {
 public:

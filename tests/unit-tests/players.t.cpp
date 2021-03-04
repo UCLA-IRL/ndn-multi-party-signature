@@ -32,7 +32,7 @@ BOOST_AUTO_TEST_CASE(SingleSigner)
 
   // schema
   MultipartySchema schema;
-  schema.m_pktName = WildCardName("/a/b/_");
+  schema.m_pktName = WildCardName("/a/b/*");
   schema.m_ruleId = "01";
   schema.m_signers.emplace_back(Name("/signer/KEY/123"));
   schema.m_minOptionalSigners = 0;
@@ -89,7 +89,7 @@ BOOST_AUTO_TEST_CASE(MultipleSigner)
 
   // schema
   MultipartySchema schema;
-  schema.m_pktName = WildCardName("/a/b/_");
+  schema.m_pktName = WildCardName("/a/b/*");
   schema.m_ruleId = "01";
   schema.m_signers.emplace_back(Name("/signer1/KEY/123"));
   schema.m_signers.emplace_back(Name("/signer2/KEY/123"));
@@ -160,7 +160,7 @@ BOOST_AUTO_TEST_CASE(SignerReplacement)
 
   // schema
   MultipartySchema schema;
-  schema.m_pktName = WildCardName("/a/b/_");
+  schema.m_pktName = WildCardName("/a/b/*");
   schema.m_ruleId = "01";
   schema.m_signers.emplace_back(Name("/signer1/KEY/123"));
   schema.m_signers.emplace_back(Name("/signer2/KEY/123"));

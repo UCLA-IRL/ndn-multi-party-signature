@@ -10,33 +10,31 @@ BOOST_AUTO_TEST_SUITE(TestSchema)
 BOOST_AUTO_TEST_CASE(SchemaInfoJSON)
 {
   auto schema = MultipartySchema::fromJSON("../tests/unit-tests/config-files/sample-schema.json");
-  //std::cout << schema.toString() << std::endl;
   BOOST_CHECK_EQUAL(schema.m_pktName.m_name, "/example/data");
   BOOST_CHECK_EQUAL(schema.m_ruleId, "rule1");
   BOOST_CHECK_EQUAL(schema.m_minOptionalSigners, 2);
   BOOST_CHECK_EQUAL(schema.m_signers.size(), 2);
   BOOST_CHECK_EQUAL(schema.m_optionalSigners.size(), 3);
-  BOOST_CHECK_EQUAL(schema.m_signers[0].m_name, Name("/example/a/KEY/_/_"));
-  BOOST_CHECK_EQUAL(schema.m_signers[1].m_name, Name("/example/b/KEY/_/_"));
-  BOOST_CHECK_EQUAL(schema.m_optionalSigners[0].m_name, Name("/example/c/KEY/_/_"));
-  BOOST_CHECK_EQUAL(schema.m_optionalSigners[1].m_name, Name("/example/d/KEY/_/_"));
-  BOOST_CHECK_EQUAL(schema.m_optionalSigners[2].m_name, Name("/example/e/KEY/_/_"));
+  BOOST_CHECK(schema.m_signers[0].match(Name("/example/a/KEY/1/23")));
+  BOOST_CHECK(schema.m_signers[1].match(Name("/example/b/KEY/xx/yy")));
+  BOOST_CHECK(schema.m_optionalSigners[0].match(Name("/example/c/KEY/verylongcomponent/short")));
+  BOOST_CHECK(schema.m_optionalSigners[1].match(Name("/example/d/KEY/123/456")));
+  BOOST_CHECK(schema.m_optionalSigners[2].match(Name("/example/e/KEY/789/0")));
 }
 
 BOOST_AUTO_TEST_CASE(SchemaInfoINFO)
 {
   auto schema = MultipartySchema::fromINFO("../tests/unit-tests/config-files/sample-schema.info");
-  //std::cout << schema.toString() << std::endl;
   BOOST_CHECK_EQUAL(schema.m_pktName.m_name, "/example/data");
   BOOST_CHECK_EQUAL(schema.m_ruleId, "rule1");
   BOOST_CHECK_EQUAL(schema.m_minOptionalSigners, 2);
   BOOST_CHECK_EQUAL(schema.m_signers.size(), 2);
   BOOST_CHECK_EQUAL(schema.m_optionalSigners.size(), 3);
-  BOOST_CHECK_EQUAL(schema.m_signers[0].m_name, Name("/example/a/KEY/_/_"));
-  BOOST_CHECK_EQUAL(schema.m_signers[1].m_name, Name("/example/b/KEY/_/_"));
-  BOOST_CHECK_EQUAL(schema.m_optionalSigners[0].m_name, Name("/example/c/KEY/_/_"));
-  BOOST_CHECK_EQUAL(schema.m_optionalSigners[1].m_name, Name("/example/d/KEY/_/_"));
-  BOOST_CHECK_EQUAL(schema.m_optionalSigners[2].m_name, Name("/example/e/KEY/_/_"));
+  BOOST_CHECK(schema.m_signers[0].match(Name("/example/a/KEY/1/23")));
+  BOOST_CHECK(schema.m_signers[1].match(Name("/example/b/KEY/xx/yy")));
+  BOOST_CHECK(schema.m_optionalSigners[0].match(Name("/example/c/KEY/verylongcomponent/short")));
+  BOOST_CHECK(schema.m_optionalSigners[1].match(Name("/example/d/KEY/123/456")));
+  BOOST_CHECK(schema.m_optionalSigners[2].match(Name("/example/e/KEY/789/0")));
 }
 
 BOOST_AUTO_TEST_CASE(SchemaLoadFail)
@@ -142,8 +140,8 @@ BOOST_AUTO_TEST_CASE(SchemaMinSignerMultipleMatchName)
   schema.m_pktName.m_name = Name("/a/b/c");
   schema.m_ruleId = "...";
   schema.m_signers.emplace_back("/a");
-  schema.m_signers.emplace_back("/b/_");
-  schema.m_optionalSigners.emplace_back("/_/c");
+  schema.m_signers.emplace_back("/b/*");
+  schema.m_optionalSigners.emplace_back("/*/c");
   schema.m_minOptionalSigners = 1;
 
   std::vector<Name> names;
@@ -160,8 +158,8 @@ BOOST_AUTO_TEST_CASE(SchemaMinSignerMultipleMatchPosition)
   MultipartySchema schema;
   schema.m_pktName.m_name = Name("/a/b/c");
   schema.m_ruleId = "...";
-  schema.m_signers.emplace_back("/a/_");
-  schema.m_optionalSigners.emplace_back("/b/_");
+  schema.m_signers.emplace_back("/a/*");
+  schema.m_optionalSigners.emplace_back("/b/*");
   schema.m_minOptionalSigners = 1;
 
   std::vector<Name> names;
@@ -179,8 +177,8 @@ BOOST_AUTO_TEST_CASE(SchemaMinSignerWithPrefix)
   MultipartySchema schema;
   schema.m_pktName.m_name = Name("/a/b/c");
   schema.m_ruleId = "...";
-  schema.m_signers.emplace_back("2x/a/_");
-  schema.m_optionalSigners.emplace_back("3x/b/_");
+  schema.m_signers.emplace_back("2x/a/*");
+  schema.m_optionalSigners.emplace_back("3x/b/*");
   schema.m_minOptionalSigners = 2;
 
   std::vector<Name> names;
