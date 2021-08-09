@@ -1,4 +1,4 @@
-# ndn-multi-party-signature
+# NDN-MPS: Multiparty Signature Support over Named Data Networking
 
 Goals:
 
@@ -25,16 +25,6 @@ cmake -DHAVE_TESTS=1 -DCMAKE_BUILD_TYPE=Release ..
 make
 ./unit-tests
 ```
-
-## Progress Track
-
-* [x] The crypto operations of players
-* [x] Encoding/decoding of BLS signature info and signature value
-* [x] Schema file parsing
-* [x] Negotiation protocol
-* [x] Verification
-* [x] Replacement when some signers are not available
-* [ ] Load public key from files
 
 ## Contact
 
